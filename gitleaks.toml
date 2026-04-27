@@ -1,0 +1,45 @@
+# gitleaks.toml — extends defaults, adds project-specific rules for Transcribe.
+# Loaded by .pre-commit-config.yaml gitleaks hook.
+#
+# Default gitleaks rules already cover AWS / Stripe / GitHub / GCP / Slack / OpenAI / etc.
+# The rules below add the secrets THIS PROJECT specifically handles.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "huggingface-token"
+description = "Hugging Face access token (hf_...)"
+regex = '''hf_[A-Za-z0-9]{34,}'''
+tags = ["huggingface", "token"]
+
+[[rules]]
+id = "supabase-secret-key"
+description = "Supabase secret-key key (sb_secret_...)"
+regex = '''sb_secret_[A-Za-z0-9_-]{30,}'''
+tags = ["supabase", "secret"]
+
+[[rules]]
+id = "supabase-publishable-key"
+description = "Supabase publishable key (sb_publishable_...) — flag in case it lands in an unexpected file"
+regex = '''sb_publishable_[A-Za-z0-9_-]{30,}'''
+tags = ["supabase", "publishable"]
+
+[[rules]]
+id = "supabase-legacy-jwt"
+description = "Legacy Supabase service-role / anon key (3-segment JWT starting with eyJ...)"
+regex = '''eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'''
+tags = ["jwt", "supabase"]
+
+[[rules]]
+id = "supabase-project-url"
+description = "Supabase project URL (catches *.supabase.co references in committed configs)"
+regex = '''https?://[a-z0-9]{20}\.supabase\.co'''
+tags = ["supabase", "url"]
+
+[allowlist]
+description = "Allow placeholders in .env.example and the rules file itself"
+paths = [
+  '''\.env\.example$''',
+  '''gitleaks\.toml$''',
+]

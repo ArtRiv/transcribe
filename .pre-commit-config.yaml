@@ -1,0 +1,27 @@
+# .pre-commit-config.yaml
+# Run `pre-commit install` after cloning to activate the hook.
+# Without `pre-commit install`, this file does NOTHING.
+# Verify install with: test -f .git/hooks/pre-commit && grep -q pre-commit .git/hooks/pre-commit
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        args: ["--config=gitleaks.toml"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff-format
+        files: ^backend/
+      - id: ruff-check
+        args: ["--fix"]
+        files: ^backend/
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: ^frontend/
+        types_or: [javascript, jsx, ts, tsx, css, json, markdown]
