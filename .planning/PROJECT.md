@@ -78,27 +78,27 @@ If hosting cost ever creeps in, the project has failed its premise. Everything e
 - The friend's work involves consuming long audio/video deliverables; reading is much faster than listening, which is the original pain point.
 - Existing transcription sites are paywalled or have crippled free tiers — that's the gap this project fills.
 - The developer has already prototyped Whisper locally on their own GPU and was satisfied with quality.
-- Diarization is a hard ask for plain Whisper — likely solved with **WhisperX** (transcription + word-level timestamps + pyannote-based diarization in one pipeline), to be confirmed during research.
+- **GPU is AMD Radeon RX 6600 (8 GB VRAM) on Ubuntu 26.04 LTS** — this rules out the CUDA-based stack. Transcription runs via **whisper.cpp with the Vulkan backend** (works on AMD); diarization via **pyannote on CPU** (slower but reliable; ~5–10 min for a 90-min file).
 - Public-repo + portfolio framing means: clean commits, sensible folder layout, a real README, and code that holds up to a reviewer skimming it.
 - The developer can supply API keys, sample audio, Whisper docs, etc. when needed — happy to be asked.
 
 ## Constraints
 
 - **Cost**: Zero recurring monetary cost — no paid GPU hosts, no per-minute API fees, no paid SaaS dependencies. Free tiers (Vercel, Supabase, Cloudflare) are fine.
-- **Compute**: Whisper inference must run on the developer's local GPU; the backend assumes a CUDA-capable machine.
+- **Compute**: AMD Radeon RX 6600 (8 GB VRAM, RDNA2) on Ubuntu 26.04 LTS. Transcription via whisper.cpp + Vulkan; diarization via pyannote on CPU. CUDA-based engines (WhisperX, faster-whisper, ctranslate2) are NOT available on this hardware.
 - **Availability**: Public URL is up only while the host PC is on — explicitly acceptable, not a bug.
 - **Stack (frontend)**: Next.js + Shadcn UI + Tailwind. Locked.
-- **Stack (backend)**: Python + FastAPI. Locked.
+- **Stack (backend)**: Python + FastAPI (orchestration) + whisper.cpp (transcription) + pyannote-audio (diarization on CPU). Locked.
 - **Data layer**: Supabase (Postgres + auth + storage where useful). Locked.
 - **Repo**: Single public monorepo named `transcribe` with frontend and backend side-by-side. Clean, reviewable git history.
-- **Tunneling**: Cloudflare Tunnel (free) to expose local backend; this is the working assumption — alternatives (ngrok free, Tailscale Funnel) only if Cloudflare doesn't fit.
+- **Tunneling**: Cloudflare **Quick Tunnel** (`trycloudflare.com`) for v1 — accept hostname churn on tunnel restart (Vercel env var update + redeploy each time). Named tunnel + custom domain deferred until a domain is registered.
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| WhisperX (assumed) for transcription + diarization | Plain Whisper has no diarization; WhisperX bundles word-level timestamps + pyannote diarization in one pipeline, runs on local GPU | — Pending (confirm in research) |
-| Backend on local GPU + Cloudflare Tunnel; frontend on Vercel | Only path to "$0/month" given the hard free constraint; user explicitly accepted "URL up only when my PC is on" | — Pending |
+| **whisper.cpp + Vulkan for transcription, pyannote on CPU for diarization** (AMD pivot) | RX 6600 is AMD/RDNA2 → no CUDA → WhisperX/faster-whisper/ctranslate2 all unavailable. whisper.cpp's Vulkan backend works on any GPU; pyannote on CPU is slower but reliable | ✓ Locked 2026-04-27 |
+| Backend on local GPU + Cloudflare Quick Tunnel (`trycloudflare.com`); frontend on Vercel | Only path to "$0/month"; user has no domain yet → Quick Tunnel is the free path. Hostname churn on restart is accepted; we'll document the env-var/redeploy step | ✓ Locked 2026-04-27 |
 | Optional auth (Supabase) — anonymous can transcribe; sign-in unlocks history | Lowest friction for portfolio drive-by visitors and the friend, history feature gives auth a real reason to exist | — Pending |
 | Soft-gate public access (per-IP rate limit + file-size cap + single-job queue) | Public URL means strangers can hit the GPU; need basic abuse protection without forcing sign-in | — Pending |
 | Editor scope = diarization fixes + inline text correction | User explicitly asked for diarization-merge UX; free-text fixes are a small extension that materially improves output quality | — Pending |

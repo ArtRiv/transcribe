@@ -17,21 +17,24 @@ See `.planning/PROJECT.md` for the full project definition (validated/active/out
 <!-- GSD:stack-start source:research/STACK.md -->
 ## Technology Stack
 
+**Hardware (host):** AMD Radeon RX 6600 (8 GB VRAM, RDNA2) on Ubuntu 26.04 LTS.
+
 **Frontend (Vercel free):** Next.js 15 (App Router) · React 19 · TypeScript · Tailwind 4 · shadcn/ui · `@supabase/ssr` 0.7.x · Zustand · @tanstack/react-query · `tus-js-client` 4.x · Vitest · Playwright · pnpm.
 
-**Backend (developer's GPU machine):** Python 3.11 · FastAPI ≥0.115 · WhisperX 3.8.5 · faster-whisper ≥1.2 · ctranslate2 ≥4.5 (CUDA 12.3+ / cuDNN 9) · pyannote.audio ≥3.3.2,<4 · torch 2.4–2.6 (cu124 wheel) · ffmpeg ≥6 · supabase-py 2.x · PyJWT[crypto] · sse-starlette (dev only) · slowapi · pytest + pytest-asyncio + asgi-lifespan · jiwer · ruff · uv.
+**Backend (developer's machine):** Python 3.11 · FastAPI ≥0.115 · **whisper.cpp** with Vulkan backend (ASR; via `pywhispercpp` or subprocess to `whisper-cli`) · **pyannote.audio ≥3.3.2,<4 on CPU** (diarization) · ffmpeg ≥6 · supabase-py 2.x · PyJWT[crypto] · sse-starlette (dev only) · slowapi · pytest + pytest-asyncio + asgi-lifespan · jiwer · ruff · uv.
 
-**Data plane (Supabase free):** Postgres + Auth (JWKS, ES256) + Realtime + Storage (transcript JSON only — never source media).
+**Data plane (Supabase free):** Postgres + Auth (JWKS) + Realtime + Storage (transcript JSON only — never source media).
 
-**Public exposure:** Cloudflare Tunnel (cloudflared) — named tunnel with custom domain.
+**Public exposure:** Cloudflare Quick Tunnel (`trycloudflare.com`) — hostname changes on restart; Vercel env update + redeploy is part of the documented operational workflow.
 
-**Critical pinning:**
-- `whisperx==3.8.5` is incompatible with `pyannote.audio>=4` — must pin `<4`
-- `ctranslate2>=4.5` requires cuDNN 9 (not 8)
+**Critical pinning / setup:**
+- `pyannote.audio<4` (the 4.x release is incompatible with the rest of the diarization stack); explicitly pin `pipeline.to(torch.device("cpu"))` after instantiation
+- whisper.cpp built with `-DGGML_VULKAN=1`; depends on Mesa Vulkan (`mesa-vulkan-drivers`, `libvulkan-dev`, `vulkan-tools`) — NOT the proprietary `amdgpu-pro` driver
 - `@supabase/auth-helpers-nextjs` is dead — use `@supabase/ssr`
-- WhisperX is untested on Python 3.13 — stick with 3.11
+- whisper.cpp model files (GGML/GGUF) — pin SHA-256 in `.env.example`
+- Engine pivot is documented in `.planning/research/SUMMARY.md` "Amendment 2026-04-27"
 
-See `.planning/research/STACK.md` for the full version-compatibility matrix and rationale.
+See `.planning/research/STACK.md` for the original CUDA-stack research (now superseded for the engine + tunnel layers; the rest stands).
 <!-- GSD:stack-end -->
 
 <!-- GSD:architecture-start source:research/ARCHITECTURE.md -->

@@ -405,3 +405,57 @@ The roadmapper should flag these as blockers for the setup phase.
 
 *Research completed: 2026-04-27*
 *Ready for roadmap: yes*
+
+---
+
+## Amendment 2026-04-27 — Engine Pivot (Post-Research)
+
+After PROJECT.md was written and research was done, the developer supplied actual hardware: **AMD Radeon RX 6600 (8 GB VRAM, RDNA2) on Ubuntu 26.04 LTS**. The CUDA-based stack proposed throughout this document — WhisperX 3.8.5, faster-whisper, ctranslate2, torch+cu124 — is **NOT available on this hardware**. CUDA is NVIDIA-exclusive; the RX 6600 is AMD/RDNA2 and is officially unsupported in ROCm 6+.
+
+### Engine pivot — locked
+
+- **Transcription:** `whisper.cpp` with the Vulkan backend (works on any GPU, including AMD RDNA2). Model files in GGML/GGUF format (e.g., `ggml-medium.bin`, `ggml-large-v3-turbo.bin`).
+- **Diarization:** `pyannote.audio` 3.x running on **CPU** (no torch.cuda dependency). Slower than GPU pyannote (≈5–10 minutes for a 90-minute file on a modern desktop CPU), but reliable and zero-cost.
+- **Alignment / word timestamps:** whisper.cpp emits per-word timestamps natively when invoked with `--output-json-full` / equivalent — no separate wav2vec2 alignment step is required. (This actually simplifies the pipeline relative to WhisperX, which needed a third model.)
+- **Quality preset → model mapping (revised for 8 GB Vulkan):**
+  - **Fast** = `ggml-small.bin` or `ggml-base.bin` (whichever benchmarks better on RX 6600)
+  - **Average (default)** = `ggml-medium.bin` (≈1.5 GB) or `ggml-large-v3-turbo.bin` (≈1.6 GB) if it loads cleanly under Vulkan with diarization concurrent in CPU/RAM
+  - **Slow** = `ggml-large-v3.bin` (≈3.0 GB GGUF q5_0) — **gated off by default on 8 GB**, can be unlocked via a single config flag for users on bigger cards
+- **Phase 2 must include a benchmarking spike** that measures realtime factor for each candidate model on the RX 6600 with whisper.cpp + Vulkan, plus pyannote-CPU wall-time on a 90-minute file, before declaring the preset map final.
+
+### Stack rows that change
+
+| Layer | Old (CUDA stack) | New (AMD/Vulkan stack) |
+|---|---|---|
+| Transcription engine | WhisperX 3.8.5 | whisper.cpp (Vulkan-built; via `pywhispercpp` or subprocess to `whisper-cli`) |
+| Inference engine | ctranslate2 ≥ 4.5 (CUDA 12.3+/cuDNN 9) | whisper.cpp's Vulkan backend (no Python ML runtime needed for ASR) |
+| ASR runtime | faster-whisper ≥ 1.2 | whisper.cpp |
+| DL framework for ASR | torch 2.4–2.6 (cu124 wheel) | None (whisper.cpp is C++) |
+| Word alignment | wav2vec2 via WhisperX | whisper.cpp native word timestamps |
+| Diarization | pyannote.audio ≥3.3.2,<4 (on GPU) | pyannote.audio ≥3.3.2,<4 (on CPU; `device=torch.device("cpu")`) |
+| GPU runtime check | `torch.cuda.is_available()` | `vulkaninfo` / whisper.cpp `--list-devices` |
+
+### Stack rows that survive unchanged
+
+- All frontend (Next.js, Shadcn, Tailwind, `@supabase/ssr`, `tus-js-client`, Zustand, react-query, Vitest, Playwright)
+- All Supabase wiring (Auth via JWKS, Realtime, Storage for transcript JSON only)
+- FastAPI + asyncio.Queue/Lock single-job queue
+- TUS chunked upload, 90 MB chunks
+- Supabase Realtime (Postgres Changes on `jobs`) as the progress channel
+- Service-role key perimeter
+- All security / RLS / secret hygiene requirements
+
+### Tunnel decision change
+
+The user has no registered domain, so a **Cloudflare Quick Tunnel** (`trycloudflare.com`) is used for v1. Hostname churn on tunnel restart is accepted; the Vercel `NEXT_PUBLIC_BACKEND_URL` env-var-update + redeploy step is documented in the README. A named tunnel with a custom domain remains the recommended v2 upgrade path once a domain is registered.
+
+### Pitfalls section additions (informal)
+
+- **Vulkan SDK setup on Ubuntu 26.04:** install `mesa-vulkan-drivers`, `libvulkan-dev`, and `vulkan-tools`; verify with `vulkaninfo --summary`. AMD's Mesa driver is the working path; do NOT install AMD's proprietary `amdgpu-pro` driver (incompatible with modern Mesa Vulkan on consumer cards).
+- **whisper.cpp build:** clone the repo, `cmake -B build -DGGML_VULKAN=1 && cmake --build build --config Release`. The `whisper-cli` binary or the Python `pywhispercpp` package both work; choose subprocess for simplicity (less binding-version drift).
+- **Model files:** download GGML/GGUF model files from the whisper.cpp HuggingFace mirror; pin model SHA-256 in `.env.example` for reproducibility.
+- **Pyannote on CPU:** explicitly set `pipeline.to(torch.device("cpu"))` after instantiation; without this, pyannote 3.x will try to use CUDA if torch detects any CUDA device (it won't on AMD-only machines, but the explicit cast prevents future surprises).
+- **Concurrent device memory:** whisper.cpp Vulkan and pyannote-CPU don't compete for VRAM, but they DO compete for host RAM during pyannote diarization. Run a wall-clock test with the largest expected file before promising any ETA.
+
+This amendment supersedes the affected portions of "Stack at a Glance," "Quality Presets — Model Mapping," and the WhisperX/CUDA-specific items in "Top Pitfalls to Defuse Early." The original sections are retained for traceability but should be read with this amendment in mind.
+

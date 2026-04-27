@@ -4,7 +4,7 @@
 
 Transcribe is a free, self-hostable web app that turns long audio/video into editable, speaker-labeled transcripts using WhisperX on the developer's home GPU, with $0/month recurring cost. The journey: lay a secure foundation (monorepo, Supabase schema with RLS-from-day-zero, Cloudflare named tunnel, secret hygiene), then build the backend transcription pipeline and the frontend editor in parallel against a shared `jobs` table contract, integrate them end-to-end with auth and history, harden the public URL against abuse and misconfiguration, and finish with the portfolio polish (README, demo gif, clean commit history) that makes it worth linking to.
 
-The architecture is locked: source media uploads via TUS chunked POST directly to FastAPI through the tunnel (90 MB chunks); progress flows over Supabase Realtime (Postgres Changes on `jobs`), never SSE through the tunnel; the service-role key never leaves the FastAPI host. These decisions are not revisited at phase boundaries.
+The architecture is locked: source media uploads via TUS chunked POST directly to FastAPI through the tunnel (90 MB chunks); progress flows over Supabase Realtime (Postgres Changes on `jobs`), never SSE through the tunnel; the service-role key never leaves the FastAPI host. **Engine pivot (2026-04-27):** the hardware is AMD RX 6600 (8 GB, RDNA2) on Ubuntu 26.04, so the CUDA-based WhisperX/faster-whisper/ctranslate2 stack is replaced by **whisper.cpp + Vulkan** (ASR) and **pyannote on CPU** (diarization). The tunnel is a Cloudflare Quick Tunnel (`trycloudflare.com`) for v1 — hostname churn on restart is accepted and the Vercel-env-update workflow is documented. These decisions are not revisited at phase boundaries.
 
 ## Phases
 
@@ -24,38 +24,34 @@ Phases 2 and 3 can execute in parallel (independent lanes after Phase 1).
 ## Phase Details
 
 ### Phase 1: Foundation
-**Goal**: A correctly-wired empty monorepo where every secret is gitignored from commit zero, the Supabase schema has RLS on every public table, and a stable public hostname resolves to the (empty) backend.
-**Depends on**: Nothing (first phase). **BLOCKED by user inputs** — see "User-Blocked Items" below.
+**Goal**: A correctly-wired empty monorepo where every secret is gitignored from commit zero, the Supabase schema has RLS on every public table, a Cloudflare Quick Tunnel proxies to the local backend, and Vercel auto-deploys the empty frontend.
+**Depends on**: Nothing (first phase). User-supplied inputs collected 2026-04-27 (HF_TOKEN, GPU, host OS, Supabase keys) — license-acceptance step still required (see User Actions Required).
 **Requirements**: REPO-01, REPO-03, REPO-04, REPO-05, SEC-01, SEC-04, SEC-05, OPS-01, OPS-03
 **Success Criteria** (what must be TRUE):
-  1. The repo has `frontend/`, `backend/`, and `supabase/` directories with their respective tooling (`pnpm`, `uv`, `supabase` CLI), a top-level `LICENSE`, a `.env.example` documenting every variable, and a pinned dependency matrix (CUDA / cuDNN / torch / ctranslate2 / pyannote / whisperx versions called out)
-  2. A `git commit` containing any high-entropy string (HF token, Supabase service-role key, Cloudflare tunnel credentials) is blocked by a pre-commit secret scanner; `.gitignore` excludes `.env*` (with `!.env.example` allowed)
+  1. The repo has `frontend/`, `backend/`, and `supabase/` directories with their respective tooling (`pnpm`, `uv`, `supabase` CLI), a top-level `LICENSE`, a `.env.example` documenting every variable, and a pinned dependency matrix (whisper.cpp build flags / Vulkan SDK / pyannote / Python / Node versions called out)
+  2. A `git commit` containing any high-entropy string (HF token, Supabase service-role key) is blocked by a pre-commit secret scanner; `.gitignore` excludes `.env*` (with `!.env.example` allowed) and the temporary `hf_token`/`supabase`/`gpu`/`ubuntu_version` input files at repo root
   3. The Supabase project has migrations applied for `jobs` and `transcripts` tables with `ENABLE ROW LEVEL SECURITY` in the same migration as `CREATE TABLE`, and `supabase_realtime` publication includes both tables
-  4. A named Cloudflare Tunnel resolves a stable custom-domain hostname (e.g., `api.<your-domain>`) and proxies to the developer's local machine; the hostname does not change on tunnel restart
-  5. Pushing to `main` triggers a Vercel auto-deploy of the (empty) frontend
+  4. A Cloudflare Quick Tunnel (`cloudflared tunnel --url http://localhost:8000`) is running and its current `*.trycloudflare.com` hostname is captured into a local file; the README documents how to update `NEXT_PUBLIC_BACKEND_URL` in Vercel and redeploy after each tunnel restart
+  5. Pushing to `main` triggers a Vercel auto-deploy of the (empty) frontend; the deployed site reads `NEXT_PUBLIC_BACKEND_URL` from Vercel env vars
 **Plans**: TBD
 **UI hint**: no
 
-**User-Blocked Items** (executor must ask before proceeding):
-  - **HF_TOKEN**: HuggingFace read-scoped token; user must accept licenses on `pyannote/segmentation-3.0` AND `pyannote/speaker-diarization-3.1` in a browser
-  - **GPU model and VRAM**: determines whether "Slow" preset is gateable (REQ OPTS-07)
-  - **Host OS**: Linux native vs Windows + WSL2 vs Windows native — affects ffmpeg / tunnel / CUDA setup paths
-  - **Domain name**: registered domain for the named Cloudflare Tunnel (free `*.workers.dev` is NOT sufficient)
-  - **Supabase project ref + keys**: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+**User Actions Required** (executor should explicitly remind):
+  - Visit `huggingface.co/pyannote/segmentation-3.0` and `huggingface.co/pyannote/speaker-diarization-3.1` while signed in and accept each model's terms — the captured `HF_TOKEN` returns 403 from these models until both pages have been accepted in the browser. Required before Phase 2 diarization can be exercised, but should be done now to unblock testing.
 
 ---
 
 ### Phase 2: Backend Pipeline
-**Goal**: A standalone FastAPI service on the developer's GPU that accepts TUS chunked uploads, runs the WhisperX pipeline (ffmpeg normalize → ASR → alignment → diarization → merged JSON) under a single-job lock, writes progress and results to Supabase Postgres for Realtime to broadcast, and survives a 20-job VRAM soak test without leaking memory.
+**Goal**: A standalone FastAPI service on the developer's machine that accepts TUS chunked uploads, runs the whisper.cpp+Vulkan ASR + pyannote-CPU diarization pipeline (ffmpeg normalize → ASR → diarization → merged JSON) under a single-job lock, writes progress and results to Supabase Postgres for Realtime to broadcast, and survives a 20-job memory soak test without leaking host RAM or Vulkan device memory.
 **Depends on**: Phase 1
 **Parallelizable with**: Phase 3 (independent lane — both consume the Phase 1 schema as a contract)
 **Requirements**: CORE-04, CORE-05, CORE-06, CORE-07, OPS-02, OPS-05, OPS-06, OPS-07, OPS-08, OPTS-07, SEC-08, TEST-01, TEST-02, TEST-04
 **Success Criteria** (what must be TRUE):
-  1. A standalone `backend/scripts/transcribe_local.py` takes an audio/video file path and prints a structured JSON payload (segments × speakers × words × timestamps) using the locked WhisperX 3.8.5 + faster-whisper + pyannote 3.x stack on the dev's GPU
-  2. The FastAPI service starts with one command (`uv run uvicorn ...`), runs a CUDA self-check at startup that fails fast if no GPU is detected, loads all WhisperX models into VRAM exactly once via the lifespan hook, and exposes `/healthz` and `/readyz`
+  1. A standalone `backend/scripts/transcribe_local.py` takes an audio/video file path and prints a structured JSON payload (segments × speakers × words × timestamps) using the whisper.cpp Vulkan binding (via `pywhispercpp` or a thin subprocess wrapper around the `whisper-cli`/`main` binary) plus pyannote 3.x running on CPU
+  2. The FastAPI service starts with one command (`uv run uvicorn ...`), runs a Vulkan self-check at startup (probes `vulkaninfo`/whisper.cpp `--list-devices`, fails fast if no Vulkan device is found), loads the whisper.cpp model into Vulkan device memory and the pyannote pipeline into RAM exactly once via the lifespan hook, and exposes `/healthz` and `/readyz`
   3. Files smaller than 90 MB upload via plain multipart POST and files ≥ 90 MB upload via TUS chunked upload (90 MB chunks); the assembled file is normalized by ffmpeg to 16 kHz mono and deleted from disk after the job completes (success or failure); source media is never written to Supabase Storage
-  4. Submitting a job through the queue runs end-to-end on a real audio file; progress and stage transitions (Queued → Extracting → Transcribing → Diarizing → Aligning → Done) are written to the `jobs` row in Postgres and `torch.cuda.empty_cache()` is called between jobs
-  5. When VRAM is below 12 GB, the `/readyz` endpoint reports the "Slow" preset as unavailable; golden-fixture tests with `jiwer` WER thresholds (`@pytest.mark.gpu`) pass locally; a "mock engine" mode runs the same routes and queue tests without a GPU; a 20-job soak test ends with VRAM within ~5% of starting allocation
+  4. Submitting a job through the queue runs end-to-end on a real audio file; progress and stage transitions (Queued → Extracting → Transcribing → Diarizing → Merging → Done) are written to the `jobs` row in Postgres; per-job buffers (whisper.cpp context + pyannote intermediates) are released between jobs so steady-state memory does not grow
+  5. On the 8 GB RX 6600, `/readyz` advertises only the presets that actually fit (Fast: small/base; Average: medium or large-v3-turbo if it loads under Vulkan; Slow: large-v3 gated off); golden-fixture tests with `jiwer` WER thresholds (`@pytest.mark.gpu`) pass locally; a "mock engine" mode runs the same routes and queue tests without Vulkan or pyannote weights; a 20-job memory soak test ends with both Vulkan device memory and host RAM within ~5% of post-warmup baseline
 **Plans**: TBD
 **UI hint**: no
 

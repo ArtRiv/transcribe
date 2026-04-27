@@ -14,7 +14,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **CORE-03**: Frontend shows the file's size and duration before upload starts and warns if it exceeds limits
 - [ ] **CORE-04**: Files smaller than 90 MB upload via plain multipart POST; files ≥ 90 MB upload via TUS chunked upload (~90 MB chunks) directly to FastAPI
 - [ ] **CORE-05**: Backend normalizes audio/video to 16 kHz mono via ffmpeg before transcription
-- [ ] **CORE-06**: Backend transcribes the file with WhisperX (ASR + alignment + diarization) and returns a structured payload (segments × speakers × words × timestamps)
+- [ ] **CORE-06**: Backend transcribes the file with whisper.cpp (ASR via Vulkan on AMD GPU) plus pyannote on CPU (diarization), and returns a structured payload (segments × speakers × words × timestamps)
 - [ ] **CORE-07**: Source media is deleted from the backend disk immediately after the transcription job completes (success or failure)
 - [ ] **CORE-08**: Anonymous transcripts are not persisted server-side beyond the active editing session
 - [ ] **CORE-09**: A failed transcription surfaces a clear error message to the user (with stage labels: upload / extraction / transcription / diarization / alignment)
@@ -27,7 +27,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **OPTS-04**: User can choose auto-detect speaker count or pin a fixed number of speakers
 - [ ] **OPTS-05**: User can pick the spoken language explicitly, or let Whisper auto-detect (default)
 - [ ] **OPTS-06**: When auto-detect is used, the detected language is shown in the result header (e.g., "Detected: pt")
-- [ ] **OPTS-07**: The "Slow" preset is gated off (with explanation) when the host GPU does not have enough VRAM (≥ 12 GB)
+- [ ] **OPTS-07**: On 8 GB AMD RX 6600, the "Slow" preset (large-v3) is gated off by default; only "Fast" (small/base) and "Average" (medium or large-v3-turbo if it fits Vulkan) are exposed. The gate logic is centralized so that users on larger GPUs can unlock "Slow" via a single config flag.
 
 ### Transcript View & Playback (VIEW)
 
@@ -87,11 +87,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **OPS-01**: Frontend deploys to Vercel from a `main`-branch push (auto-deploy)
 - [ ] **OPS-02**: Backend runs on the developer's local machine via a single command after `git pull` (e.g., `uv run uvicorn ...`)
-- [ ] **OPS-03**: Backend is reached publicly via a named Cloudflare Tunnel with a stable custom-domain hostname
+- [ ] **OPS-03**: Backend is reached publicly via a Cloudflare Quick Tunnel (`trycloudflare.com`); the current tunnel hostname is captured in a local file and the documented restart workflow describes how to update `NEXT_PUBLIC_BACKEND_URL` in Vercel and redeploy
 - [ ] **OPS-04**: Frontend has a health probe to the backend; when the backend is unreachable, the upload control is disabled and a clear "service offline — host is asleep" message is shown
-- [ ] **OPS-05**: Backend startup runs a CUDA self-check (asserts GPU available, prints torch/cuDNN versions) and fails fast on misconfiguration
-- [ ] **OPS-06**: WhisperX models load once at FastAPI lifespan startup and stay in VRAM for the process lifetime
-- [ ] **OPS-07**: Between jobs, the backend calls `torch.cuda.empty_cache()` to release activation memory
+- [ ] **OPS-05**: Backend startup runs a Vulkan self-check (probes the AMD GPU via `vulkaninfo` or whisper.cpp's `--list-devices`, asserts at least one Vulkan-capable device, logs device name and driver version) and fails fast on misconfiguration
+- [ ] **OPS-06**: whisper.cpp models (loaded once into Vulkan device memory) and pyannote pipeline (loaded once into CPU/RAM) are initialized at FastAPI lifespan startup and stay resident for the process lifetime
+- [ ] **OPS-07**: Between jobs, the backend explicitly releases per-job buffers (whisper.cpp context reset and pyannote intermediate tensors) so steady-state memory does not grow across consecutive transcriptions
 - [ ] **OPS-08**: A `/healthz` and `/readyz` endpoint expose service status (used by the frontend health probe)
 
 ### Security & Privacy (SEC)
@@ -119,9 +119,9 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Quality & Testing (TEST)
 
 - [ ] **TEST-01**: Backend has golden-fixture transcription tests (3–5 short audio clips with reference transcripts) measured with `jiwer` WER thresholds, marked `@pytest.mark.gpu` and skippable in CI
-- [ ] **TEST-02**: Backend tests can run in a "mock engine" mode without a GPU so CI passes without GPU runners
+- [ ] **TEST-02**: Backend tests can run in a "mock engine" mode without a GPU (no Vulkan, no pyannote weights) so CI passes without GPU/heavy-model runners
 - [ ] **TEST-03**: Frontend has Vitest unit tests for the export renderers (`.txt`, `.srt`, `.vtt`, `.json`, `.md`)
-- [ ] **TEST-04**: A 20-job VRAM soak test runs locally before any release of the backend pipeline
+- [ ] **TEST-04**: A 20-job memory soak test runs locally before any release of the backend pipeline (covers both Vulkan device memory via whisper.cpp diagnostics AND host RAM via `psutil`); steady-state memory must stay within ~5% of the post-warmup baseline
 - [ ] **TEST-05**: Playwright E2E covers at least the anonymous golden path (upload → transcribe → edit → download)
 
 ## v2 Requirements
