@@ -1,0 +1,36 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+hf_token
+gpu
+supabase
+ubuntu_version
+
+# Cloudflare tunnel credentials
+cloudflared/
+.cloudflared/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+.turbo/
+dist/
+build/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
