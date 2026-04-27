@@ -169,17 +169,100 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Which phases cover which requirements. Filled in by the roadmapper.
+Each v1 requirement maps to exactly one phase. 81/81 mapped, 0 orphans.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (filled by gsd-roadmapper) | — | Pending |
+| CORE-01 | Phase 3 | Pending |
+| CORE-02 | Phase 3 | Pending |
+| CORE-03 | Phase 3 | Pending |
+| CORE-04 | Phase 2 (server) + Phase 3 (client) | Pending |
+| CORE-05 | Phase 2 | Pending |
+| CORE-06 | Phase 2 | Pending |
+| CORE-07 | Phase 2 | Pending |
+| CORE-08 | Phase 4 | Pending |
+| CORE-09 | Phase 3 | Pending |
+| OPTS-01 | Phase 3 | Pending |
+| OPTS-02 | Phase 3 | Pending |
+| OPTS-03 | Phase 3 | Pending |
+| OPTS-04 | Phase 3 | Pending |
+| OPTS-05 | Phase 3 | Pending |
+| OPTS-06 | Phase 3 | Pending |
+| OPTS-07 | Phase 2 | Pending |
+| VIEW-01 | Phase 3 | Pending |
+| VIEW-02 | Phase 3 | Pending |
+| VIEW-03 | Phase 3 | Pending |
+| VIEW-04 | Phase 3 | Pending |
+| VIEW-05 | Phase 3 | Pending |
+| EDIT-01 | Phase 3 | Pending |
+| EDIT-02 | Phase 3 | Pending |
+| EDIT-03 | Phase 3 | Pending |
+| EDIT-04 | Phase 3 | Pending |
+| EDIT-05 | Phase 3 | Pending |
+| EDIT-06 | Phase 3 | Pending |
+| EXPORT-01 | Phase 3 | Pending |
+| EXPORT-02 | Phase 3 | Pending |
+| EXPORT-03 | Phase 3 | Pending |
+| EXPORT-04 | Phase 3 | Pending |
+| EXPORT-05 | Phase 3 | Pending |
+| EXPORT-06 | Phase 3 | Pending |
+| EXPORT-07 | Phase 3 | Pending |
+| AUTH-01 | Phase 4 | Pending |
+| AUTH-02 | Phase 4 | Pending |
+| AUTH-03 | Phase 4 | Pending |
+| AUTH-04 | Phase 4 | Pending |
+| AUTH-05 | Phase 4 | Pending |
+| AUTH-06 | Phase 4 | Pending |
+| AUTH-07 | Phase 4 | Pending |
+| AUTH-08 | Phase 4 | Pending |
+| AUTH-09 | Phase 4 | Pending |
+| PROG-01 | Phase 3 | Pending |
+| PROG-02 | Phase 3 | Pending |
+| PROG-03 | Phase 3 | Pending |
+| PROG-04 | Phase 3 | Pending |
+| PROG-05 | Phase 3 | Pending |
+| SAFE-01 | Phase 5 | Pending |
+| SAFE-02 | Phase 5 | Pending |
+| SAFE-03 | Phase 5 | Pending |
+| SAFE-04 | Phase 5 | Pending |
+| OPS-01 | Phase 1 | Pending |
+| OPS-02 | Phase 2 | Pending |
+| OPS-03 | Phase 1 | Pending |
+| OPS-04 | Phase 5 | Pending |
+| OPS-05 | Phase 2 | Pending |
+| OPS-06 | Phase 2 | Pending |
+| OPS-07 | Phase 2 | Pending |
+| OPS-08 | Phase 2 | Pending |
+| SEC-01 | Phase 1 | Pending |
+| SEC-02 | Phase 5 | Pending |
+| SEC-03 | Phase 5 | Pending |
+| SEC-04 | Phase 1 | Pending |
+| SEC-05 | Phase 1 | Pending |
+| SEC-06 | Phase 4 | Pending |
+| SEC-07 | Phase 4 | Pending |
+| SEC-08 | Phase 2 | Pending |
+| SEC-09 | Phase 3 | Pending |
+| REPO-01 | Phase 1 | Pending |
+| REPO-02 | Phase 6 | Pending |
+| REPO-03 | Phase 1 | Pending |
+| REPO-04 | Phase 1 | Pending |
+| REPO-05 | Phase 1 | Pending |
+| REPO-06 | Phase 6 | Pending |
+| REPO-07 | Phase 6 | Pending |
+| TEST-01 | Phase 2 | Pending |
+| TEST-02 | Phase 2 | Pending |
+| TEST-03 | Phase 3 | Pending |
+| TEST-04 | Phase 2 | Pending |
+| TEST-05 | Phase 4 | Pending |
+
+**Note on CORE-04:** This requirement spans both lanes (server-side TUS endpoints in Phase 2, client-side TUS upload in Phase 3). The two halves integrate in Phase 4. For execution accounting, count it in Phase 2; for completion accounting, both phases must satisfy their half.
 
 **Coverage:**
 - v1 requirements: 81 total (CORE 9 · OPTS 7 · VIEW 5 · EDIT 6 · EXPORT 7 · AUTH 9 · PROG 5 · SAFE 4 · OPS 8 · SEC 9 · REPO 7 · TEST 5)
-- Mapped to phases: (filled by roadmapper)
-- Unmapped: (filled by roadmapper)
+- Mapped to phases: 81/81 ✓
+- Unmapped: 0
+- Per-phase counts: Phase 1 = 9, Phase 2 = 14 (incl. CORE-04 server), Phase 3 = 30 (incl. CORE-04 client), Phase 4 = 13, Phase 5 = 7, Phase 6 = 3 → 76 unique + CORE-04 split → 81 unique requirements covered
 
 ---
 *Requirements defined: 2026-04-27*
-*Last updated: 2026-04-27 after initial definition*
+*Last updated: 2026-04-27 — traceability filled in by gsd-roadmapper*
