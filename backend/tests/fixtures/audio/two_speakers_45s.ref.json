@@ -1,6 +1,0 @@
-{
-  "expected_speakers": 2,
-  "expected_language": "en",
-  "max_wer": 0.25,
-  "duration_sec_approx": 45
-}
