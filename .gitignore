@@ -1,0 +1,74 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+hf_token
+gpu
+supabase.input
+ubuntu_version
+
+# Cloudflare tunnel credentials
+cloudflared/
+.cloudflared/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+.turbo/
+dist/
+build/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vercel CLI artifacts (created by `vercel link`)
+.vercel/
+
+# Supabase CLI cache
+.supabase/
+supabase/.branches/
+supabase/.temp/
+
+# Pre-commit cache
+.pre-commit/
+
+# whisper.cpp model files (Phase 2 will download these locally; never commit)
+backend/models/
+*.bin
+*.gguf
+
+# Tunnel URL capture (out-of-repo, but defense-in-depth in case it's ever symlinked in)
+.transcribe/
+
+# IDE
+.idea/
+.vscode/
+
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+
+# uv
+.uv-cache/
+
+# Local-only AI-assisted-development artifacts (kept off the public/portfolio repo)
+.planning/
+**/CLAUDE.md
+**/AGENTS.md
+.claude/
+.cursor/

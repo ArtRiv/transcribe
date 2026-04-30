@@ -1,0 +1,80 @@
+[project]
+name = "transcribe-backend"
+version = "0.1.0"
+description = "FastAPI backend for the Transcribe app — runs whisper.cpp + pyannote on the dev's GPU host"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "fastapi[standard]>=0.136.0",
+    "pydantic-settings>=2.14.0",
+    "pyannote.audio>=3.3.2,<4.0",
+    "huggingface-hub<1.0",
+    # torch/torchaudio pinned <2.7 because pyannote.audio 3.x imports
+    # `torchaudio.AudioMetaData` which was removed in torchaudio 2.7+.
+    "torch>=2.4,<2.6",
+    "torchaudio>=2.4,<2.6",
+    "supabase>=2.5,<3.0",
+    "pyjwt[crypto]>=2.9,<3.0",
+    "jiwer>=4.0",
+    "psutil>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "pytest-asyncio>=0.24",
+    "asgi-lifespan>=2.1",
+    "httpx>=0.28",  # ASGI test client + Phase 2 outbound HTTP
+    "ruff>=0.15.12",
+    "pytest-mock>=3.14",
+    "respx>=0.21",
+]
+
+# Python version is pinned via `backend/.python-version` (3.11) plus the
+# `requires-python = ">=3.11,<3.12"` constraint in [project] above. Modern uv
+# does NOT accept a `python = ...` field under `[tool.uv]` — use a
+# `.python-version` file instead. uv reads it automatically on every command.
+
+# Force the CPU-only torch wheel (no CUDA libs). The default PyPI torch wheel
+# pulls ~2 GB of nvidia-* libs on Linux/x86_64; for an AMD/Vulkan host those
+# are dead weight. PyTorch's dedicated CPU index serves the same versions
+# without the CUDA payload.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchaudio = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["models/", ".venv/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]  # allow assert statements in tests
+# FastAPI's File(...)/Form(...)/Depends(...) in default args is the documented
+# canonical pattern; B008 (no function calls in argument defaults) is a
+# false-positive for this framework idiom on every routes/* module.
+"app/routes/*" = ["B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "gpu: tests that require a Vulkan-capable GPU (skipped in CI)",
+    "slow: tests that take >30s (golden-fixture, soak) — opt-in via -m slow",
+]
