@@ -84,3 +84,96 @@ cloudflared --version
 supabase --version
 gitleaks version
 ```
+
+## Phase 2 build pins (locked 2026-04-27)
+
+### whisper.cpp
+- Tag: `v1.8.4`
+- Commit SHA: `9386f239401074690479731c1e41683fbbeac557`
+- Built with: `cmake -B build -DGGML_VULKAN=1 -DCMAKE_BUILD_TYPE=Release`
+- Build path on this host: `~/.transcribe/build/whisper.cpp/build/bin/whisper-cli`
+
+### GGML model SHA-256 pins
+- `ggml-large-v3-turbo.bin`: `1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69`
+- `ggml-medium.bin`: `6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208`
+- `ggml-small.bin`: `1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b`
+- `ggml-large-v3.bin`: NOT downloaded — Slow preset gated off on 8 GB host (OPTS-07)
+
+### Vulkan runtime probe (2026-04-28)
+
+`whisper-cli` v1.8.4 in this repo does NOT expose a `--list-devices` flag. The
+ggml Vulkan backend logs the enumerated devices to stderr on init. Probed by
+running `whisper-cli -m ggml-small.bin -f samples/jfk.wav` and observing:
+
+```
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = AMD Radeon RX 6600 (RADV NAVI23) (radv) | uma: 0 | fp16: 1 | bf16: 0 | warp size: 32 | shared memory: 65536 | int dot: 1 | matrix cores: none
+whisper_backend_init_gpu: using Vulkan0 backend
+```
+
+So Vulkan is correctly compiled in and the Mesa RADV driver enumerates the
+RX 6600 as `Vulkan0`. The Wave 0 verifier (`backend/scripts/verify_phase2.sh`)
+should grep for `ggml_vulkan: Found .* Vulkan devices` rather than
+`--list-devices` output.
+
+## whisper.cpp --output-json-full schema (locked Wave 0)
+
+Probe run on **2026-04-28** against `ggml-small.bin` + `samples/jfk.wav`,
+using whisper.cpp `v1.8.4` (commit `9386f239401074690479731c1e41683fbbeac557`).
+Reproduce with `bash tools/probe_whisper_json.sh`.
+
+### Top-level keys
+
+```
+[
+  "model",         // model metadata (audio dims, ftype, mels, multilingual, text, type, vocab)
+  "params",        // invocation params (language, model, translate)
+  "result",        // result-level metadata: { "language": "en" }
+  "systeminfo",    // build/runtime banner string
+  "transcription"  // array of segment objects — the load-bearing field for Wave 2
+]
+```
+
+### `transcription[i]` (segment) keys
+
+```
+[
+  "offsets",       // { "from": <ms_int>, "to": <ms_int> }   — milliseconds since clip start
+  "text",          // string — the segment text (with leading space)
+  "timestamps",    // { "from": "HH:MM:SS,mmm", "to": "HH:MM:SS,mmm" } — SRT-style HMS strings
+  "tokens"         // array of token objects (see below)
+]
+```
+
+### `transcription[i].tokens[j]` (token) keys
+
+```
+[
+  "id",            // int — vocab token id
+  "offsets",       // { "from": <ms_int>, "to": <ms_int> } — token-level millisecond span
+  "p",             // float in [0, 1] — token probability
+  "t_dtw",         // int — DTW timestamp; -1 when DTW disabled (the default)
+  "text",          // string — token text (special tokens shown as e.g. "[_BEG_]")
+  "timestamps"     // { "from": "HH:MM:SS,mmm", "to": "HH:MM:SS,mmm" }
+]
+```
+
+### Wave 2 parser implications (locks A1)
+
+- The segment array lives at top-level key **`transcription`** (NOT `segments`).
+  RESEARCH.md §641-668 had this as MEDIUM-confidence — now LOCKED.
+- Use **`offsets.from` / `offsets.to`** (integer milliseconds) for numeric math,
+  not the `timestamps` HMS strings (which are formatting-only).
+- Tokens carry per-token confidence as **`p`** (NOT `confidence` / `prob`).
+- `t_dtw == -1` is the normal "DTW disabled" sentinel — Wave 2 should treat it
+  as "no token-time-distortion data available," not as a missing field.
+- Special-token markers (`[_BEG_]`, `[_TT_<n>_]`, `[_EOT_]`) appear in the
+  `text` field of token entries with `id >= 50257`. Wave 2's `_normalize_payload`
+  in `backend/app/pipeline/transcribe.py` MUST filter these out of `segments[i].words`
+  before persisting (otherwise they leak into the editor UI).
+- The `result.language` field is the auto-detected language; carry it into
+  `transcript.metadata.language` (CORE-04).
+
+If a future whisper.cpp release changes any of these key names, update this
+section AND `_normalize_payload` in the same commit. Reference probe:
+`tools/probe_whisper_json.sh`.

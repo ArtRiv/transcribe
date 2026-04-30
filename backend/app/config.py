@@ -13,6 +13,7 @@ The repo .gitignore + gitleaks pre-commit (Plan 02) enforce this at commit time.
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,6 +40,32 @@ class Settings(BaseSettings):
     # ── whisper.cpp (Phase 2 enforces) ─────────────────────────────────────
     whisper_model_path: str = Field(default="")
     whisper_cpp_build_dir: str = Field(default="")
+    whisper_bin_path: str = Field(default="")  # full path to whisper-cli binary
+    # Silero VAD model path. Required by whisper.cpp 1.8+ when --vad is set.
+    # If empty, the lifespan resolves to ``models_dir / 'ggml-silero-v5.1.2.bin'``;
+    # if that file is missing too, transcribe_subprocess fails fast at startup.
+    whisper_vad_model_path: str = Field(default="")
+
+    # ── Models + lifecycle (Phase 2; CORE-07) ──────────────────────────────
+    models_dir: Path = Field(
+        default_factory=lambda: Path.home() / ".transcribe" / "models"
+    )
+    uploads_dir: Path = Field(
+        default_factory=lambda: Path.home() / ".transcribe" / "uploads"
+    )
+    work_dir: Path = Field(
+        default_factory=lambda: Path.home() / ".transcribe" / "work"
+    )
+
+    # ── Model SHA-256 pins (Phase 2; CLAUDE.md "Critical pinning") ─────────
+    model_small_sha256: str = Field(default="")
+    model_medium_sha256: str = Field(default="")
+    model_turbo_sha256: str = Field(default="")
+    model_large_sha256: str = Field(default="")  # only used if enable_slow_preset=true
+    model_vad_silero_sha256: str = Field(default="")  # ggml-silero-v5.1.2.bin
+
+    # ── Preset gating (Phase 2; OPTS-07) ───────────────────────────────────
+    enable_slow_preset: bool = Field(default=False)
 
     model_config = SettingsConfigDict(
         env_file=".env",

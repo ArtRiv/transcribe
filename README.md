@@ -70,6 +70,64 @@ This costs ~1 minute per tunnel restart and is the price of using Quick Tunnel i
 
 [MIT](LICENSE) — chosen for compatibility with all upstream deps (Whisper, whisper.cpp, pyannote, Next.js, FastAPI all MIT/permissive).
 
+## Backend (Phase 2): Run + verify
+
+The FastAPI backend runs locally on the developer's GPU host. Phase 2 ships the full transcription pipeline (whisper.cpp + Vulkan ASR, pyannote-CPU diarization, single-job queue, TUS chunked upload, Supabase Realtime progress).
+
+**Single-command start (OPS-02):**
+
+```bash
+cd backend && uv run uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+The lifespan probes Vulkan, loads pyannote, sweeps orphaned uploads, then accepts traffic.
+
+> **Phase 2 self-test note — leave Supabase env unset.** During Phase 2, the worker writes job/transcript rows to Supabase only when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are populated, but `POST /jobs` has no auth and therefore no `user_id` to attach. With those env vars set, the final `transcripts` INSERT fails the schema's `user_id NOT NULL` constraint (the pipeline still runs end-to-end through `merging` — only persistence fails). Phase 4 wires Supabase JWT and supplies `user_id` from the auth token; until then, run Phase 2 with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` **unset** in the runtime shell. The progress writer's lazy client constructor returns `None` when either is empty and all writes silently no-op — exactly the documented Phase 2 behavior.
+
+**Public exposure** (Cloudflare Quick Tunnel — restart workflow documented above):
+
+```bash
+bash backend/scripts/tunnel.sh
+```
+
+The tunnel hostname is captured in `~/.transcribe/tunnel-url`. After every restart, update `NEXT_PUBLIC_BACKEND_URL` in Vercel and redeploy (full instructions in the "Tunnel restart workflow" section above).
+
+**Verification:**
+
+```bash
+bash backend/scripts/verify_phase2.sh --quick   # ~30s, mock-engine + filesystem probes (CI-friendly)
+bash backend/scripts/verify_phase2.sh           # full: + real ffmpeg + pipeline unit tests + gpu transcribe
+```
+
+The full mode runs gpu-marked tests if a Vulkan device + `HF_TOKEN` are present; skips cleanly otherwise.
+
+**Soak test** (operator-driven; ~15-30 min, GPU required):
+
+```bash
+cd backend && uv run pytest tests/test_soak.py -m "gpu and slow" -x -s
+```
+
+Asserts ±5% drift on VRAM (sysfs) AND host RSS (psutil USS) across 20 jobs. This is the falsifiable acceptance criterion for the entire phase — if it passes, the backend can sustain long sessions on the home GPU; if it fails, there's a leak to investigate.
+
+**TUS interop with the live tunnel** (manual, ~5 min, Chrome):
+
+```bash
+open "tools/tus_interop_test.html?endpoint=$(cat ~/.transcribe/tunnel-url)/uploads"
+```
+
+Pick a 100-200 MB media file and confirm 2 PATCHes (90 MB + remainder) + final HEAD complete.
+
+**Self-host requirements** (Ubuntu 26.04 + AMD Vulkan-capable GPU):
+
+```bash
+bash backend/scripts/install_phase2_prereqs.sh   # apt: ffmpeg, vulkan-tools, cmake, postgresql-client, glslc
+bash backend/scripts/build_whisper_cpp.sh        # clone + cmake -DGGML_VULKAN=1 (5-10 min)
+bash backend/scripts/download_models.sh          # ~3.5 GB GGML weights with SHA-256 verification
+cd backend && uv sync                            # Python deps (pyannote, torch CPU, supabase, jiwer, psutil)
+```
+
+See [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) for pinned versions + commit SHAs.
+
 ## Status & Roadmap
 
 See [`.planning/ROADMAP.md`](.planning/ROADMAP.md) — six-phase plan. Phase 1 (Foundation) is in progress; transcription pipeline (Phase 2) and frontend skeleton (Phase 3) are parallel lanes once Phase 1 closes.

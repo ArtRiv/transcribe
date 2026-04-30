@@ -21,6 +21,8 @@ export const env = {
   /** Supabase anon / publishable key (sb_publishable_* or legacy eyJ...). */
   NEXT_PUBLIC_SUPABASE_ANON_KEY:
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
+  /** "1" enables MSW + mock Realtime in development; any other value disables. */
+  NEXT_PUBLIC_USE_MOCKS: process.env.NEXT_PUBLIC_USE_MOCKS ?? "0",
 } as const;
 
 export type PublicEnv = typeof env;

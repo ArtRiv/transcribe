@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TUS interop test — Transcribe Phase 2</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; }
+    #log { background: #f4f4f4; padding: 1rem; height: 320px; overflow: auto; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; }
+    button { padding: 0.5rem 1rem; }
+  </style>
+</head>
+<body>
+  <h1>TUS interop test (CORE-04, &#8805;90 MB path)</h1>
+  <p>Manual harness for validating tus-js-client 4.x against the FastAPI TUS server through the live Cloudflare Quick Tunnel.</p>
+  <ol>
+    <li>Start the backend: <code>cd backend &amp;&amp; uv run uvicorn app.main:app --host 127.0.0.1 --port 8000</code></li>
+    <li>Start the tunnel: <code>bash backend/scripts/tunnel.sh</code></li>
+    <li>Open this page with the tunnel URL: <code>file://$(pwd)/tools/tus_interop_test.html?endpoint=$(cat ~/.transcribe/tunnel-url)/uploads</code></li>
+    <li>Click "Choose file" + pick a 100&#8211;200 MB media file (e.g., a long MP4)</li>
+    <li>Verify the console log shows: 2 PATCHes (90 MB then remainder) AND a final HEAD reporting the upload as complete</li>
+  </ol>
+
+  <p><label>Endpoint: <input id="endpoint" size="80"></label></p>
+  <p><input type="file" id="file"></p>
+  <p><button id="upload">Upload (90 MB chunks)</button></p>
+  <h3>Console</h3>
+  <div id="log"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.3.1/dist/tus.min.js"></script>
+  <script>
+    const log = (...args) => {
+      const div = document.getElementById('log');
+      div.textContent += args.join(' ') + '\n';
+      div.scrollTop = div.scrollHeight;
+    };
+    const params = new URLSearchParams(window.location.search);
+    document.getElementById('endpoint').value = params.get('endpoint') || '';
+
+    // Normalize the endpoint so a bare tunnel URL still works.
+    // Common operator mistake: paste the tunnel root without the /uploads
+    // suffix → tus-js-client POSTs to "/" → FastAPI 404 with body
+    // {"detail":"Not Found"} (which previously looked like a request to
+    // a /detail path). Append /uploads if missing; collapse any double slash.
+    const normalizeEndpoint = (raw) => {
+      let url = raw.trim().replace(/\/+$/, '');  // strip trailing slashes
+      if (!/^https?:\/\//i.test(url)) {
+        return { url: '', warning: 'endpoint must start with http:// or https://' };
+      }
+      let warning = '';
+      if (!/\/uploads$/.test(url)) {
+        url = url + '/uploads';
+        warning = 'endpoint did not end in /uploads — auto-appended';
+      }
+      return { url, warning };
+    };
+
+    document.getElementById('upload').addEventListener('click', () => {
+      const rawEndpoint = document.getElementById('endpoint').value;
+      const { url: endpoint, warning } = normalizeEndpoint(rawEndpoint);
+      const fileInput = document.getElementById('file');
+      if (!endpoint) {
+        log(`ERROR: ${warning || 'endpoint missing'}`);
+        return;
+      }
+      if (warning) {
+        log(`WARN: ${warning}`);
+        document.getElementById('endpoint').value = endpoint;  // reflect normalization in the input
+      }
+      if (!fileInput.files.length) { log('ERROR: no file'); return; }
+      const file = fileInput.files[0];
+      log(`Starting upload: ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB) -> ${endpoint}`);
+
+      const upload = new tus.Upload(file, {
+        endpoint,
+        chunkSize: 90 * 1024 * 1024,   // CORE-04 + Pitfall 3 — 90 MB; CF cap is 100 MB
+        metadata: { filename: file.name, 'content-type': file.type || 'application/octet-stream' },
+        onError: (err) => log('ERROR:', err.message || err),
+        onProgress: (bytesUploaded, bytesTotal) => {
+          log(`progress: ${(bytesUploaded / 1024 / 1024).toFixed(1)} / ${(bytesTotal / 1024 / 1024).toFixed(1)} MB (${(100 * bytesUploaded / bytesTotal).toFixed(1)}%)`);
+        },
+        onSuccess: () => log('SUCCESS — upload complete; URL:', upload.url),
+      });
+      upload.start();
+    });
+  </script>
+</body>
+</html>
