@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PresetName = Literal["fast", "average", "average_turbo", "slow"]
 
@@ -38,6 +38,25 @@ class JobCreateRequest(BaseModel):
         le=20,
         description="Fixed speaker count for diarization; None means auto-detect.",
     )
+
+    @field_validator("num_speakers", mode="before")
+    @classmethod
+    def _zero_is_auto(cls, v: object) -> object:
+        """The frontend sends 0 to mean 'Auto'. Coerce to None BEFORE the
+        ge=1 validator runs so old browser bundles (and curl smokes) that
+        still send '0' don't 400. Empty strings from TUS metadata's optional
+        field also collapse to None here."""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            stripped = v.strip()
+            if stripped == "" or stripped == "0":
+                return None
+            return stripped
+        if isinstance(v, int) and v == 0:
+            return None
+        return v
+
     diarize: bool = Field(
         default=True,
         description="Run pyannote speaker diarization. Off = ASR-only output.",

@@ -44,12 +44,19 @@ def test_jobcreate_invalid_preset_raises() -> None:
         JobCreateRequest(preset="invalid")
 
 
-def test_jobcreate_num_speakers_lower_bound() -> None:
-    """num_speakers must be >= 1."""
+def test_jobcreate_num_speakers_zero_is_auto() -> None:
+    """num_speakers=0 (and "" / "0" from form encoding) collapse to None for
+    'Auto' diarization. Old browser bundles + the TUS metadata path send 0
+    or empty string when the slider is at Auto; the schema must accept both
+    rather than 400. Quick task 260430-mwn."""
     from app.schemas import JobCreateRequest
 
+    assert JobCreateRequest(preset="fast", num_speakers=0).num_speakers is None
+    assert JobCreateRequest(preset="fast", num_speakers="0").num_speakers is None  # type: ignore[arg-type]
+    assert JobCreateRequest(preset="fast", num_speakers="").num_speakers is None  # type: ignore[arg-type]
+    # Negative still fails (genuine bad input, not the Auto sentinel).
     with pytest.raises(ValidationError):
-        JobCreateRequest(preset="fast", num_speakers=0)
+        JobCreateRequest(preset="fast", num_speakers=-1)
 
 
 def test_jobcreate_num_speakers_upper_bound() -> None:

@@ -47,7 +47,8 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
     const action = opts?.action;
     // backwards-compat: `duration` is the old name; `durationMs` is preferred.
     // When an action is present, default to 5000ms (D-11 — 5s undo window).
-    const durationMs = opts?.durationMs ?? opts?.duration ?? (action ? 5000 : 1800);
+    const durationMs =
+      opts?.durationMs ?? opts?.duration ?? (action ? 5000 : 1800);
     setToasts((prev) => [
       ...prev,
       { id, message, variant: opts?.variant ?? "default", action },
@@ -63,7 +64,12 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
       <div
         role="status"
         aria-live="polite"
-        className="fixed left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2"
+        // pointer-events-none: an empty toast container at z-[200] otherwise
+        // intercepts clicks meant for popovers/dropdowns/dialogs that sit
+        // visually below 200 (e.g. sign-in popover at base-ui's default z).
+        // Individual toast items below override with pointer-events-auto so
+        // visible toasts remain interactive. Quick task 260430-mwn.
+        className="fixed left-1/2 -translate-x-1/2 z-[200] flex flex-col gap-2 pointer-events-none"
         style={{ bottom: 24 }}
       >
         {toasts.map((t) => (
@@ -72,7 +78,7 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
             data-slot="toast"
             data-variant={t.variant}
             className={cn(
-              "px-4 py-2 rounded-(--radius-md) text-sm font-medium",
+              "pointer-events-auto px-4 py-2 rounded-(--radius-md) text-sm font-medium",
               "shadow-[0_10px_40px_rgba(0,0,0,0.5)]",
               "flex items-center",
               "data-[variant=default]:bg-[oklch(0.92_0.02_80)] data-[variant=default]:text-[oklch(0.20_0.02_70)]",
@@ -89,7 +95,12 @@ function ToastProvider({ children }: { children: React.ReactNode }) {
                   setToasts((prev) => prev.filter((x) => x.id !== t.id));
                 }}
                 className="ml-3 text-(--color-accent) hover:underline cursor-pointer"
-                style={{ background: "none", border: 0, padding: 0, font: "inherit" }}
+                style={{
+                  background: "none",
+                  border: 0,
+                  padding: 0,
+                  font: "inherit",
+                }}
               >
                 {t.action.label}
               </button>

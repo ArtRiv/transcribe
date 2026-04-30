@@ -7,6 +7,7 @@ import * as Popover from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { signInWithMagicLink } from "@/lib/auth/actions";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type SignInState = "idle" | "submitting" | "sent" | "error";
 
@@ -31,6 +32,31 @@ export function SignInPopover({ trigger }: SignInPopoverProps) {
   const [error, setError] = React.useState<string | null>(null);
   const [email, setEmail] = React.useState("");
   const [isPending, startTransition] = React.useTransition();
+  const [googlePending, setGooglePending] = React.useState(false);
+
+  // Google OAuth — client-side because OAuth is a full-page redirect to
+  // Google, then back to /auth/callback (the same route used by magic-link).
+  // Gated on Supabase Dashboard → Authentication → Providers → Google;
+  // surfaces "provider is not enabled" through the existing error UI.
+  // Quick task 260430-mwn.
+  const handleGoogle = async () => {
+    if (googlePending) return;
+    setGooglePending(true);
+    setState("idle");
+    setError(null);
+    const supabase = getSupabaseBrowserClient();
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    // signInWithOAuth normally redirects the browser; if it returns we got
+    // an error (provider disabled, network, etc.) — surface and reset.
+    if (oauthError) {
+      setState("error");
+      setError(oauthError.message);
+      setGooglePending(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -122,45 +148,84 @@ export function SignInPopover({ trigger }: SignInPopoverProps) {
               </p>
             </div>
           ) : (
-            /* Idle / submitting / error — show form */
-            <form onSubmit={handleSubmit}>
-              <Input
-                type="email"
-                name="email"
-                placeholder="you@email.com"
-                autoFocus
-                autoComplete="email"
-                required
-                className="w-full mb-3"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={state === "submitting"}
-                aria-label="Email address"
-              />
-              {/* Error message — inline below input */}
-              {state === "error" && error && (
-                <p
-                  role="alert"
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--color-err)",
-                    marginBottom: 10,
-                    marginTop: -8,
-                  }}
-                >
-                  {error}
-                </p>
-              )}
+            /* Idle / submitting / error — Google CTA + magic-link form */
+            <>
               <Button
-                type="submit"
-                variant="primary"
-                className="w-full"
-                disabled={state === "submitting" || !email.trim()}
-                aria-label="Send magic link"
+                type="button"
+                variant="default"
+                className="w-full mb-3"
+                onClick={() => void handleGoogle()}
+                disabled={googlePending || state === "submitting"}
+                aria-label="Continue with Google"
               >
-                {state === "submitting" ? "Sending…" : "Send magic link →"}
+                {googlePending ? "Redirecting…" : "Continue with Google"}
               </Button>
-            </form>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  margin: "10px 0",
+                  fontSize: 11,
+                  color: "var(--color-fg-3)",
+                }}
+                aria-hidden="true"
+              >
+                <div
+                  style={{
+                    flex: 1,
+                    height: 1,
+                    background: "var(--color-line)",
+                  }}
+                />
+                <span>or</span>
+                <div
+                  style={{
+                    flex: 1,
+                    height: 1,
+                    background: "var(--color-line)",
+                  }}
+                />
+              </div>
+              <form onSubmit={handleSubmit}>
+                <Input
+                  type="email"
+                  name="email"
+                  placeholder="you@email.com"
+                  autoFocus
+                  autoComplete="email"
+                  required
+                  className="w-full mb-3"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={state === "submitting"}
+                  aria-label="Email address"
+                />
+                {/* Error message — inline below input */}
+                {state === "error" && error && (
+                  <p
+                    role="alert"
+                    style={{
+                      fontSize: "12px",
+                      color: "var(--color-err)",
+                      marginBottom: 10,
+                      marginTop: -8,
+                    }}
+                  >
+                    {error}
+                  </p>
+                )}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  className="w-full"
+                  disabled={state === "submitting" || !email.trim()}
+                  aria-label="Send magic link"
+                >
+                  {state === "submitting" ? "Sending…" : "Send magic link →"}
+                </Button>
+              </form>
+            </>
           )}
         </div>
 
@@ -171,7 +236,13 @@ export function SignInPopover({ trigger }: SignInPopoverProps) {
             borderTop: "1px solid var(--color-line)",
           }}
         >
-          <p style={{ fontSize: "11.5px", color: "var(--color-fg-3)", lineHeight: 1.4 }}>
+          <p
+            style={{
+              fontSize: "11.5px",
+              color: "var(--color-fg-3)",
+              lineHeight: 1.4,
+            }}
+          >
             Anonymous transcriptions disappear after 24 hours.
           </p>
         </div>

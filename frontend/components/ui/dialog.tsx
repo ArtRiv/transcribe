@@ -23,7 +23,7 @@ function DialogBackdrop({ className, ...props }: Dialog.Backdrop.Props) {
     <Dialog.Backdrop
       data-slot="dialog-backdrop"
       className={cn(
-        "fixed inset-0 z-[100] backdrop-blur-[8px]",
+        "fixed inset-0 z-[300] backdrop-blur-[8px]",
         "data-[starting-style]:opacity-0 data-[ending-style]:opacity-0",
         "transition-opacity duration-200",
         className,
@@ -41,7 +41,7 @@ function DialogPanel({ className, children, ...props }: Dialog.Popup.Props) {
       <Dialog.Popup
         data-slot="dialog-panel"
         className={cn(
-          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101]",
+          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[301]",
           "bg-(--color-bg-2) border border-(--color-line) rounded-2xl",
           "shadow-[0_30px_80px_rgba(0,0,0,0.5)]",
           "outline-none",

@@ -19,7 +19,7 @@ function PopoverTrigger(props: Popover.Trigger.Props) {
 function PopoverPanel({ className, children, ...props }: Popover.Popup.Props) {
   return (
     <Popover.Portal>
-      <Popover.Positioner sideOffset={4}>
+      <Popover.Positioner sideOffset={4} className="z-[300]">
         <Popover.Popup
           data-slot="popover-panel"
           className={cn(

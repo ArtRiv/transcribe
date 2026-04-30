@@ -39,7 +39,7 @@ function initials(user: UserLite): string {
 function chipColorVar(userId: string): string {
   let h = 0;
   for (let i = 0; i < userId.length; i++) {
-    h = ((h * 31) + userId.charCodeAt(i)) | 0;
+    h = (h * 31 + userId.charCodeAt(i)) | 0;
   }
   const idx = Math.abs(h) % 4;
   return `--color-sp-${idx + 2}`;
@@ -100,7 +100,7 @@ export function UserButton({ user }: { user: UserLite | null }) {
         )}
       />
       <DropdownMenuPortal>
-        <DropdownMenuPositioner sideOffset={6} align="end">
+        <DropdownMenuPositioner sideOffset={6} align="end" className="z-[300]">
           <DropdownMenuPopup className="min-w-[220px]">
             {/* User info header */}
             <div className="px-2.5 py-2">

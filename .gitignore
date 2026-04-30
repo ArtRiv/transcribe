@@ -8,6 +8,12 @@ hf_token
 gpu
 supabase.input
 ubuntu_version
+# Local credential scratchpads (Resend / Google / etc — see operator notes).
+# These hold secrets pasted into Supabase Dashboard; they MUST stay out of git.
+resend.txt
+.resend.txt.swp
+resend-google.txt
+*credentials*.txt
 
 # Cloudflare tunnel credentials
 cloudflared/

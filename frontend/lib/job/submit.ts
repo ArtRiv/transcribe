@@ -26,8 +26,8 @@ export type PresetName = "fast" | "average" | "average_turbo" | "slow";
 
 export interface JobOptions {
   preset: PresetName;
-  language?: string;        // BCP-47 short code, omitted for auto-detect
-  num_speakers?: number;    // 0 = auto, otherwise pinned count
+  language?: string; // BCP-47 short code, omitted for auto-detect
+  num_speakers?: number; // 0 = auto, otherwise pinned count
   diarize: boolean;
 }
 
@@ -38,7 +38,7 @@ export function decideUploadPath(file: { size: number }): "multipart" | "tus" {
 
 export interface SubmitJobResult {
   jobId: string;
-  uploadHandle?: Upload;  // present only for TUS path; caller can call .abort()
+  uploadHandle?: Upload; // present only for TUS path; caller can call .abort()
 }
 
 /**
@@ -75,7 +75,12 @@ export async function submitJob(
     fd.append("job_id", jobId);
     fd.append("preset", options.preset);
     if (options.language) fd.append("language", options.language);
-    if (options.num_speakers != null) fd.append("num_speakers", String(options.num_speakers));
+    // num_speakers: 0 in the UI = "Auto" (per JobOptions doc above).
+    // The backend's Pydantic schema requires ge=1 OR null, so we MUST omit
+    // the field entirely when 0 — sending "0" produces a 400.
+    if (options.num_speakers != null && options.num_speakers > 0) {
+      fd.append("num_speakers", String(options.num_speakers));
+    }
     fd.append("diarize", String(options.diarize));
     const res = await fetch(`${env.NEXT_PUBLIC_BACKEND_URL}/jobs`, {
       method: "POST",
@@ -101,7 +106,12 @@ export async function submitJob(
       job_id: jobId,
       preset: options.preset,
       language: options.language ?? "",
-      num_speakers: options.num_speakers != null ? String(options.num_speakers) : "",
+      // 0 = Auto → empty string so the backend's TUS metadata parser treats
+      // it as absent (mirrors the multipart path above).
+      num_speakers:
+        options.num_speakers != null && options.num_speakers > 0
+          ? String(options.num_speakers)
+          : "",
       diarize: String(options.diarize),
     },
     auth,
