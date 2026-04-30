@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     if (!error) return NextResponse.redirect(`${origin}${next}`);
   }
 
-  // Invalid code or missing — redirect to callback page with error indicator.
-  return NextResponse.redirect(`${origin}/auth/callback?error=invalid`);
+  // Invalid code or missing — redirect to the error page (sibling route).
+  // route.ts and page.tsx cannot coexist at the same URL in App Router.
+  return NextResponse.redirect(`${origin}/auth/callback/error?reason=invalid`);
 }
