@@ -1,10 +1,11 @@
 "use client";
 import * as React from "react";
-import { PanelLeft, PanelRight, Play, Pause, Search, Download } from "lucide-react";
+import { PanelLeft, PanelRight, Search, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { Kbd } from "@/components/ui/kbd";
 import * as Tooltip from "@/components/ui/tooltip";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 type Density = "compact" | "normal" | "comfortable";
 
@@ -14,11 +15,6 @@ interface EditorToolbarProps {
   searchQuery: string;
   onSearchChange: (q: string) => void;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
-  isPlaying: boolean;
-  onPlayPause: () => void;
-  /** Scrub position 0-100. */
-  scrubPct: number;
-  onScrub: (pct: number) => void;
   speakersOpen: boolean;
   onToggleSpeakers: () => void;
   minimapOpen: boolean;
@@ -26,22 +22,28 @@ interface EditorToolbarProps {
   onExport: () => void;
 }
 
+/**
+ * Editor toolbar.
+ *
+ * Quick task 260501-1e4 (item line 33 of Things-to-change.txt) removed the
+ * Play/Pause button + scrub slider that used to live here — they duplicated
+ * the bottom AudioPlayer (which has native controls + a speed picker). The
+ * keyboard shortcut path in editor-client still drives audio.play()/pause()
+ * directly, so removing the button does not regress that affordance.
+ */
 export function EditorToolbar({
   density,
   onDensityChange,
   searchQuery,
   onSearchChange,
   searchInputRef,
-  isPlaying,
-  onPlayPause,
-  scrubPct,
-  onScrub,
   speakersOpen,
   onToggleSpeakers,
   minimapOpen,
   onToggleMinimap,
   onExport,
 }: EditorToolbarProps) {
+  const { t } = useI18n();
   return (
     <header
       role="toolbar"
@@ -64,41 +66,30 @@ export function EditorToolbar({
               variant="ghost"
               size="icon"
               onClick={onToggleSpeakers}
-              aria-label={speakersOpen ? "Hide speakers" : "Show speakers"}
+              aria-label={
+                speakersOpen
+                  ? t.editor_toggle_speakers_hide
+                  : t.editor_toggle_speakers_show
+              }
               aria-pressed={speakersOpen}
             >
               <PanelLeft size={14} aria-hidden />
             </Button>
           }
         />
-        <Tooltip.Panel>Toggle speakers</Tooltip.Panel>
+        <Tooltip.Panel>
+          {speakersOpen
+            ? t.editor_toggle_speakers_hide
+            : t.editor_toggle_speakers_show}
+        </Tooltip.Panel>
       </Tooltip.Root>
 
-      {/* Play / Pause */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onPlayPause}
-        aria-label={isPlaying ? "Pause" : "Play"}
-        aria-pressed={isPlaying}
+      {/* Search — now takes more horizontal room since the Play/Pause and
+          scrub slider were removed (item line 33 of Things-to-change.txt). */}
+      <div
+        className="relative flex items-center"
+        style={{ flex: 1, maxWidth: 480 }}
       >
-        {isPlaying ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
-      </Button>
-
-      {/* Scrub slider — native range so keyboard nav works */}
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={0.1}
-        value={scrubPct}
-        onChange={(e) => onScrub(parseFloat(e.target.value))}
-        aria-label="Audio position"
-        className="flex-1 max-w-[280px]"
-      />
-
-      {/* Search */}
-      <div className="relative flex items-center" style={{ flex: 1, maxWidth: 320 }}>
         <Search
           size={14}
           aria-hidden
@@ -110,8 +101,8 @@ export function EditorToolbar({
           ref={searchInputRef}
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Filter segments…"
-          aria-label="Filter segments"
+          placeholder={t.editor_filter_segments}
+          aria-label={t.editor_filter_segments_aria}
           className="h-[34px] bg-(--color-bg-2) border border-(--color-line) text-(--color-fg-1) text-sm placeholder:text-(--color-fg-3) rounded-(--radius-md) outline-none transition-colors focus:border-(--color-accent-line) w-full"
           style={{ paddingLeft: 28, paddingRight: 60 }}
         />
@@ -126,19 +117,24 @@ export function EditorToolbar({
       {/* Density segmented control — D-26 */}
       <Segmented<Density>
         options={[
-          { value: "compact", label: "Compact" },
-          { value: "normal", label: "Normal" },
-          { value: "comfortable", label: "Comfy" },
+          { value: "compact", label: t.editor_density_compact },
+          { value: "normal", label: t.editor_density_normal },
+          { value: "comfortable", label: t.editor_density_comfy },
         ]}
         value={density}
         onValueChange={onDensityChange}
-        aria-label="Density"
+        aria-label={t.editor_density_aria}
         size="sm"
       />
 
       {/* Export */}
-      <Button variant="default" size="sm" onClick={onExport} aria-label="Export transcript">
-        <Download size={12} aria-hidden /> Export
+      <Button
+        variant="default"
+        size="sm"
+        onClick={onExport}
+        aria-label={t.editor_export_aria}
+      >
+        <Download size={12} aria-hidden /> {t.editor_export}
       </Button>
 
       {/* Minimap toggle */}
@@ -149,14 +145,22 @@ export function EditorToolbar({
               variant="ghost"
               size="icon"
               onClick={onToggleMinimap}
-              aria-label={minimapOpen ? "Hide minimap" : "Show minimap"}
+              aria-label={
+                minimapOpen
+                  ? t.editor_toggle_minimap_hide
+                  : t.editor_toggle_minimap_show
+              }
               aria-pressed={minimapOpen}
             >
               <PanelRight size={14} aria-hidden />
             </Button>
           }
         />
-        <Tooltip.Panel>Toggle minimap</Tooltip.Panel>
+        <Tooltip.Panel>
+          {minimapOpen
+            ? t.editor_toggle_minimap_hide
+            : t.editor_toggle_minimap_show}
+        </Tooltip.Panel>
       </Tooltip.Root>
     </header>
   );

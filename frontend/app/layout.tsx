@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Inter, Fraunces, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { MswInit } from "./(mock-init)/msw-init";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { UserButton, type UserLite } from "@/components/transcribe/auth/user-button";
+import {
+  UserButton,
+  type UserLite,
+} from "@/components/transcribe/auth/user-button";
+import { I18nProvider } from "@/lib/i18n/i18n-context";
+import * as Tooltip from "@/components/ui/tooltip";
+import { LanguageToggle } from "@/components/transcribe/language-toggle";
 
 // Per D-03 + RESEARCH §Pattern 1: three families, exposed as CSS variables
 // consumed by globals.css @theme inline.
@@ -63,10 +70,24 @@ export default async function RootLayout({
       className={`${inter.variable} ${fraunces.variable} ${jetbrains.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AppBar userLite={userLite} />
-        <main className="flex-1 relative z-[2]">
-          <MswInit>{children}</MswInit>
-        </main>
+        {/* I18nProvider wraps the entire body so AppBar (LanguageToggle) and
+            every page share the same locale state. The provider is a Client
+            Component, which is fine inside an async Server Component layout —
+            the server renders the "en" default; the client provider corrects
+            on hydration via localStorage / navigator.language.
+
+            Tooltip.Provider is hoisted to the layout so the AppBar's
+            LanguageToggle tooltip works without each route adding its own
+            provider; the editor's nested Tooltip.Provider remains for safety
+            but is now a no-op (Base UI tolerates nesting). */}
+        <I18nProvider>
+          <Tooltip.Provider>
+            <AppBar userLite={userLite} />
+            <main className="flex-1 relative z-[2]">
+              <MswInit>{children}</MswInit>
+            </main>
+          </Tooltip.Provider>
+        </I18nProvider>
       </body>
     </html>
   );
@@ -95,8 +116,14 @@ function AppBar({ userLite }: { userLite: UserLite | null }) {
         backdropFilter: "blur(12px)",
       }}
     >
-      {/* Left: brand mark + name + version badge — Transcribe.html lines 212-228 */}
-      <div className="flex items-center gap-2">
+      {/* Left: brand mark + name + version badge — Transcribe.html lines 212-228.
+          Wrapped in a Link to /, so clicking the wordmark returns to the landing page. */}
+      <Link
+        href="/"
+        aria-label="Go to home"
+        className="flex items-center gap-2 no-underline"
+        style={{ color: "inherit", textDecoration: "none" }}
+      >
         {/* Brand mark — 22×22 accent square, italic Fraunces T */}
         <span
           aria-hidden="true"
@@ -123,7 +150,10 @@ function AppBar({ userLite }: { userLite: UserLite | null }) {
         >
           Transcribe
         </span>
-        {/* Version badge — Transcribe.html lines 180-189 */}
+        {/* Version badge — Transcribe.html lines 180-189.
+            Padding tweaked from "1px 6px" → "2px 6px 1px" so the cap-height of
+            the wordmark and the small-caps badge text share the same optical
+            baseline (item line 9 of Things-to-change.txt). */}
         <span
           className="text-(--color-fg-4)"
           style={{
@@ -131,7 +161,7 @@ function AppBar({ userLite }: { userLite: UserLite | null }) {
             alignItems: "center",
             marginLeft: 4,
             fontSize: "10.5px",
-            padding: "1px 6px",
+            padding: "2px 6px 1px",
             border: "1px solid var(--color-line)",
             borderRadius: 4,
             whiteSpace: "nowrap",
@@ -140,7 +170,7 @@ function AppBar({ userLite }: { userLite: UserLite | null }) {
         >
           v0.4 · self-hosted
         </span>
-      </div>
+      </Link>
 
       {/* Right: status pill + D-04 divider + user button */}
       <div className="flex items-center gap-2">
@@ -184,6 +214,10 @@ function AppBar({ userLite }: { userLite: UserLite | null }) {
             background: "var(--color-line)",
           }}
         />
+
+        {/* Language toggle (quick task 260501-1e4 — item line 7).
+            Two-locale flag toggle; English ↔ Brazilian Portuguese. */}
+        <LanguageToggle />
 
         {/* User button (Phase 4 — reinstated from deferred list per UI-SPEC §0:32) */}
         {/* Note: settings cog (nav-settings) is DROPPED — Phase 5 scope (UI-SPEC §9.1) */}

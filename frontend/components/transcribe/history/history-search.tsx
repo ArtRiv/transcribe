@@ -2,6 +2,7 @@
 import * as React from "react";
 import { Search } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 interface HistorySearchProps {
   initialValue?: string;
@@ -12,6 +13,7 @@ interface HistorySearchProps {
  * 300ms debounced; updates ?q= URL param via router.replace.
  */
 export function HistorySearch({ initialValue = "" }: HistorySearchProps) {
+  const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -46,8 +48,8 @@ export function HistorySearch({ initialValue = "" }: HistorySearchProps) {
         type="search"
         value={value}
         onChange={handleChange}
-        placeholder="Search transcripts…"
-        aria-label="Search transcripts"
+        placeholder={t.history_search_placeholder}
+        aria-label={t.history_search_placeholder}
         className="w-full pl-8 pr-3 py-1.5 text-sm bg-(--color-bg-2) border border-(--color-line) rounded-(--radius-md) text-(--color-fg-0) placeholder:text-(--color-fg-4) focus:outline-none focus:border-(--color-accent)"
       />
     </div>

@@ -1,8 +1,9 @@
 "use client";
 import * as React from "react";
-import { FileAudio, Sparkles, X } from "lucide-react";
+import { FileAudio, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SchematicIllustration } from "./schematic-illustration";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 interface UploadZoneProps {
   file: File | null;
@@ -14,8 +15,10 @@ interface UploadZoneProps {
   className?: string;
 }
 
-/** ALLOWED_EXTENSIONS mirror backend/app/routes/tus.py lines 51-64. */
-const ACCEPT_HINT = "mp3 · m4a · wav · mp4 · mov · webm";
+/** ALLOWED_EXTENSIONS mirror backend/app/routes/tus.py + jobs.py.
+ *  Keep this in sync with frontend/app/page.tsx ALLOWED_EXTS. */
+const ACCEPT_HINT =
+  "mp3 · m4a · wav · flac · ogg · mp4 · mkv · webm · mov · avi";
 
 function fmtDuration(s: number): string {
   const m = Math.floor(s / 60);
@@ -46,6 +49,7 @@ export function UploadZone({
   validationError,
   className,
 }: UploadZoneProps) {
+  const { t } = useI18n();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = React.useState(false);
 
@@ -92,7 +96,7 @@ export function UploadZone({
         <div
           role="button"
           tabIndex={0}
-          aria-label="Drop audio or video file or click to browse"
+          aria-label={t.upload_dropzone_aria}
           onClick={openPicker}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -130,7 +134,7 @@ export function UploadZone({
                   marginBottom: 4,
                 }}
               >
-                Drop a file here, or{" "}
+                {t.upload_drop_or}
                 <span
                   style={{
                     color: "var(--color-accent)",
@@ -138,7 +142,7 @@ export function UploadZone({
                     textUnderlineOffset: 3,
                   }}
                 >
-                  browse
+                  {t.upload_browse}
                 </span>
               </div>
               <div
@@ -148,17 +152,13 @@ export function UploadZone({
                   fontFamily: "var(--font-mono)",
                 }}
               >
-                {ACCEPT_HINT} — up to 5 hours
+                {ACCEPT_HINT}
+                {t.upload_extensions_suffix}
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Sparkles size={13} aria-hidden="true" />
-              Use sample audio
-            </Button>
+            {/* "Use sample audio" button removed per item line 3 of
+                Things-to-change.txt — sample audio was a development affordance
+                and is not part of the production user flow. */}
           </div>
           <input
             ref={inputRef}
@@ -232,16 +232,16 @@ export function UploadZone({
           >
             {fmtSize(file.size)}
             {" · "}
-            {duration != null ? fmtDuration(duration) : "estimating…"}
+            {duration != null ? fmtDuration(duration) : t.upload_estimating}
           </div>
         </div>
         <Button
           variant="ghost"
           size="sm"
           onClick={onClear}
-          aria-label="Replace file"
+          aria-label={t.upload_replace_aria}
         >
-          <X size={14} aria-hidden /> Replace
+          <X size={14} aria-hidden /> {t.upload_replace}
         </Button>
       </div>
       {validationError ? (

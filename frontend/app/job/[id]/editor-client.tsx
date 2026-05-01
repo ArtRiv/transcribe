@@ -14,7 +14,11 @@ import { SpeakerRail } from "@/components/transcribe/editor/speaker-rail";
 import { SegmentList } from "@/components/transcribe/editor/segment-list";
 import { EditorToolbar } from "@/components/transcribe/editor/editor-toolbar";
 import { EditorFooter } from "@/components/transcribe/editor/footer";
-import { Minimap } from "@/components/transcribe/editor/minimap";
+import {
+  Minimap,
+  type MinimapScale,
+} from "@/components/transcribe/editor/minimap";
+import { Timeline } from "@/components/transcribe/editor/timeline";
 import { AudioPlayer } from "@/components/transcribe/editor/audio-player";
 import { RestorePill } from "@/components/transcribe/restore-pill";
 import { AnonPromotionBanner } from "@/components/transcribe/auth/anon-promotion-banner";
@@ -137,11 +141,18 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const [speakersOpen, setSpeakersOpen] = React.useState(true);
   const [minimapOpen, setMinimapOpen] = React.useState(true);
+  // Lifted minimap scale so the sibling Timeline (single-speaker mode) can
+  // use the same density. Persisted by Minimap on every change.
+  const [minimapScale, setMinimapScale] = React.useState<MinimapScale>(1);
   const [exportOpen, setExportOpen] = React.useState(false);
 
-  // Audio state
+  // Audio state. After Task 6 the toolbar no longer renders a Play/Pause
+  // button, so isPlaying isn't read anywhere — but AudioPlayer still calls
+  // onPlayingChange, and a future per-segment "currently playing" indicator
+  // (deferred) will want this state. Keep the reducer pair, prefix the
+  // unused value to silence the noUnusedLocals rule.
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
-  const [isPlaying, setIsPlaying] = React.useState(false);
+  const [, setIsPlaying] = React.useState(false);
   const [playT, setPlayT] = React.useState(0);
 
   // Active segment — derived from playT; segment whose start <= playT < end
@@ -294,21 +305,11 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
     [],
   );
 
-  const onPlayPause = React.useCallback(() => {
-    const a = audioRef.current;
-    if (!a) return;
-    if (a.paused) void a.play();
-    else a.pause();
-  }, []);
-
-  const onScrub = React.useCallback(
-    (pct: number) => {
-      const a = audioRef.current;
-      if (!a || !state.duration_sec) return;
-      a.currentTime = (pct / 100) * state.duration_sec;
-    },
-    [state.duration_sec],
-  );
+  // Quick task 260501-1e4 Task 6 (item line 33 of Things-to-change.txt):
+  // the editor toolbar's duplicate Play/Pause + scrub slider were removed.
+  // The bottom <AudioPlayer> already exposes native controls + a speed picker,
+  // and the Space-bar keyboard shortcut above drives audio.play()/pause()
+  // directly, so deleting onPlayPause/onScrub does not regress UX.
 
   const onRebindFile = React.useCallback(
     (file: File) => {
@@ -316,10 +317,6 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
     },
     [jobId, setFileRef],
   );
-
-  // Scrub position as percentage 0-100 for the toolbar slider
-  const scrubPct =
-    state.duration_sec > 0 ? (playT / state.duration_sec) * 100 : 0;
 
   return (
     <ToastProvider>
@@ -374,7 +371,16 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: `${speakersOpen ? "240px" : "0"} 1fr ${minimapOpen ? "200px" : "0"}`,
+            // Right rail width grows when the single-speaker timeline is
+            // visible — it sits next to the minimap at 200px (overview) +
+            // 110px (timeline). Item line 47 of Things-to-change.txt.
+            gridTemplateColumns: `${speakersOpen ? "240px" : "0"} 1fr ${
+              minimapOpen
+                ? state.speakers.length === 1
+                  ? "310px"
+                  : "200px"
+                : "0"
+            }`,
             gridTemplateRows: "auto 1fr auto",
             gridTemplateAreas:
               '"toolbar toolbar toolbar" "left main right" "footer footer footer"',
@@ -392,10 +398,6 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               searchInputRef={searchInputRef}
-              isPlaying={isPlaying}
-              onPlayPause={onPlayPause}
-              scrubPct={scrubPct}
-              onScrub={onScrub}
               speakersOpen={speakersOpen}
               onToggleSpeakers={() => setSpeakersOpen((v) => !v)}
               minimapOpen={minimapOpen}
@@ -484,24 +486,48 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
             </div>
           </main>
 
-          {/* Right — minimap */}
+          {/* Right — minimap (+ vertical timeline when only one speaker).
+              Item line 47 of Things-to-change.txt: a single-speaker
+              transcript renders the colored stripes redundantly, so we
+              repurpose the freed visual real estate as a clickable wall
+              clock the user can scroll through. */}
           <div
             style={{
               gridArea: "right",
               overflow: "hidden",
-              display: minimapOpen ? "block" : "none",
+              display: minimapOpen ? "flex" : "none",
+              flexDirection: "row",
             }}
           >
-            <Minimap
-              segments={state.segments}
-              speakers={state.speakers}
-              playT={playT}
-              totalDuration={state.duration_sec}
-              activeSegId={activeSeg?.id ?? null}
-              onJump={(seg) => {
-                onSegmentClick(seg);
-              }}
-            />
+            <div style={{ width: 200, flexShrink: 0, height: "100%" }}>
+              <Minimap
+                segments={state.segments}
+                speakers={state.speakers}
+                playT={playT}
+                totalDuration={state.duration_sec}
+                activeSegId={activeSeg?.id ?? null}
+                onJump={(seg) => {
+                  onSegmentClick(seg);
+                }}
+                scale={minimapScale}
+                onScaleChange={setMinimapScale}
+              />
+            </div>
+            {state.speakers.length === 1 ? (
+              <div style={{ width: 110, flexShrink: 0, height: "100%" }}>
+                <Timeline
+                  segments={state.segments}
+                  totalDuration={state.duration_sec}
+                  playT={playT}
+                  scale={minimapScale}
+                  onJump={(time) => {
+                    const a = audioRef.current;
+                    if (a) a.currentTime = time;
+                    setPlayT(time);
+                  }}
+                />
+              </div>
+            ) : null}
           </div>
 
           {/* Footer — word count + save status */}

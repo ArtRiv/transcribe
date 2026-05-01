@@ -22,14 +22,19 @@ function TooltipTrigger(props: Tooltip.Trigger.Props) {
   return <Tooltip.Trigger {...props} />;
 }
 
-function TooltipPanel({
-  className,
-  children,
-  ...props
-}: Tooltip.Popup.Props) {
+function TooltipPanel({ className, children, ...props }: Tooltip.Popup.Props) {
   return (
     <Tooltip.Portal>
-      <Tooltip.Positioner sideOffset={6}>
+      {/* z-[400] sits above:
+            - dialog overlay (z-[300]) and dialog content (z-[301])
+            - popover panels (z-[300])
+            - toast viewport (z-[200])
+          Tooltips MUST clear all of those because they can be triggered
+          inside any of them (the segment-actions Reassign popover and the
+          options Best-disabled tooltip both ride on this primitive). Item
+          line 41 of Things-to-change.txt — the split-at-cursor tooltip
+          was rendering under the active-segment border at z=auto. */}
+      <Tooltip.Positioner sideOffset={6} className="z-[400]">
         <Tooltip.Popup
           data-slot="tooltip-popup"
           className={cn(

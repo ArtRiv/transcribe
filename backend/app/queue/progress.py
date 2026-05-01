@@ -98,11 +98,42 @@ async def update_job(settings: Any, job_id: str, **fields: Any) -> None:
             ).execute()
             fields["transcript_id"] = transcript_id
         except Exception as e:
-            log.error(
-                "transcripts insert failed for job %s: %s",
-                job_id,
-                type(e).__name__,
-            )
+            # supabase-py wraps PostgREST errors in APIError with `code` and
+            # `message` attrs. The original log line printed only the class
+            # name, which is why the user reported "APIError" without any
+            # actionable detail (item line 28 of Things-to-change.txt).
+            #
+            # We now:
+            #   1. Treat 23505 (unique_violation) as a benign retry no-op,
+            #      mirroring insert_job_row — without it, a single replay of
+            #      submit_from_upload spams the log on every retry.
+            #   2. Log the PostgREST `code` and a sanitized `message` so the
+            #      next failure mode is diagnosable. `message` is truncated
+            #      to 120 chars because it can echo a partial row payload
+            #      (no PII expected in our schema, but the truncation keeps
+            #      logs bounded if that ever changes).
+            code = getattr(e, "code", None)
+            if code is None:
+                # Some supabase-py error variants stash code inside args[0].
+                first = getattr(e, "args", [None])[0]
+                if hasattr(first, "get"):
+                    code = first.get("code")
+            if code == "23505":
+                log.debug(
+                    "transcripts insert: duplicate for job %s; skipping",
+                    job_id,
+                )
+            else:
+                msg = getattr(e, "message", None) or str(e)
+                if isinstance(msg, str) and len(msg) > 120:
+                    msg = msg[:117] + "..."
+                log.error(
+                    "transcripts insert failed for job %s: %s (code=%s, msg=%s)",
+                    job_id,
+                    type(e).__name__,
+                    code,
+                    msg,
+                )
 
     # Always write the payload to jobs.transcript_payload (anon retention
     # window + Realtime broadcast both depend on it being present).

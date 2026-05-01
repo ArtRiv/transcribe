@@ -83,3 +83,152 @@ def test_lazy_client_pattern_present() -> None:
     src = inspect.getsource(progress_mod)
     assert "global _client" in src
     assert "if _client is not None" in src
+
+
+# ─── Quick task 260501-1e4 Task 10 — transcripts insert error handling ────────
+
+
+def _fake_supabase_with_transcript_error(error: Exception) -> object:
+    """Build a stand-in supabase client whose .table('transcripts').insert(...).execute()
+    raises the supplied error. .table('jobs') is also mocked so the second update
+    in update_job() doesn't blow up."""
+
+    class _FakeReq:
+        def insert(self, *_a, **_k):
+            return self
+
+        def update(self, *_a, **_k):
+            return self
+
+        def eq(self, *_a, **_k):
+            return self
+
+        def execute(self):
+            raise AssertionError(  # pragma: no cover — unreachable
+                "test should not reach a generic execute()"
+            )
+
+    class _Transcripts(_FakeReq):
+        def execute(self):
+            raise error
+
+    class _Jobs(_FakeReq):
+        def execute(self):
+            return None  # success — exercises the post-error jobs UPDATE path
+
+    class _Client:
+        def table(self, name: str):
+            return _Transcripts() if name == "transcripts" else _Jobs()
+
+    return _Client()
+
+
+class _ListHandler:
+    """Minimal logging.Handler stand-in that just appends emitted records.
+    pytest-asyncio + caplog don't always agree about logger propagation in
+    this codebase's pyproject (uvicorn config swaps the root handlers); the
+    direct attach here is a more reliable contract."""
+
+    def __init__(self) -> None:
+        import logging as _logging
+
+        self.level = _logging.DEBUG
+        self.records: list = []
+
+    def handle(self, record):
+        self.records.append(record)
+
+    def createLock(self):  # noqa: N802 — interface match for logging.Handler
+        return None
+
+    def acquire(self):
+        pass
+
+    def release(self):
+        pass
+
+
+async def test_transcripts_insert_unique_violation_is_silent_no_op(
+    monkeypatch,
+) -> None:
+    """Item line 28 of Things-to-change.txt — transcripts insert errors used
+    to log "APIError" with no detail on every retry. After the fix, 23505
+    (unique_violation) is treated as a benign duplicate and logs at DEBUG."""
+    reset_client_for_tests()
+
+    class _APIError(Exception):
+        code = "23505"
+        message = "duplicate key value violates unique constraint"
+
+    settings = SimpleNamespace(
+        supabase_url="https://example.supabase.co",
+        supabase_service_role_key="key",
+    )
+    monkeypatch.setattr(
+        progress_mod,
+        "get_supabase_client",
+        lambda _settings: _fake_supabase_with_transcript_error(_APIError()),
+    )
+    handler = _ListHandler()
+    progress_mod.log.addHandler(handler)
+    try:
+        await update_job(
+            settings,
+            "job-dup",
+            status="succeeded",
+            stage="done",
+            user_id="user-1",
+            is_anonymous=False,
+            transcript_payload={"version": 1, "segments": []},
+        )
+    finally:
+        progress_mod.log.removeHandler(handler)
+    # No ERROR-level record about transcripts insert; the duplicate fires
+    # a DEBUG record only.
+    err_records = [r for r in handler.records if r.levelname == "ERROR"]
+    assert all("transcripts insert failed" not in r.getMessage() for r in err_records)
+
+
+async def test_transcripts_insert_other_error_logs_code_and_truncated_message(
+    monkeypatch,
+) -> None:
+    """When PostgREST returns a code the worker does not handle silently, the
+    log line MUST expose `code` + a truncated `message` so the next failure is
+    diagnosable (item line 28 — the original log only printed the class name)."""
+    reset_client_for_tests()
+
+    class _APIError(Exception):
+        code = "42501"  # insufficient_privilege
+        message = "x" * 200  # long message to exercise truncation
+
+    settings = SimpleNamespace(
+        supabase_url="https://example.supabase.co",
+        supabase_service_role_key="key",
+    )
+    monkeypatch.setattr(
+        progress_mod,
+        "get_supabase_client",
+        lambda _settings: _fake_supabase_with_transcript_error(_APIError()),
+    )
+    handler = _ListHandler()
+    progress_mod.log.addHandler(handler)
+    try:
+        await update_job(
+            settings,
+            "job-perm",
+            status="succeeded",
+            stage="done",
+            user_id="user-1",
+            is_anonymous=False,
+            transcript_payload={"version": 1, "segments": []},
+        )
+    finally:
+        progress_mod.log.removeHandler(handler)
+    matches = [r for r in handler.records if "transcripts insert failed" in r.getMessage()]
+    assert matches, "expected an ERROR log from transcripts insert path"
+    msg = matches[0].getMessage()
+    assert "code=42501" in msg
+    # Truncated to 117 chars + "...":
+    assert "..." in msg
+    # And not the full 200-char message:
+    assert "x" * 200 not in msg

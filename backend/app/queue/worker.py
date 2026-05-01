@@ -93,9 +93,7 @@ async def _run_job(state: Any, job: Any) -> None:
 
     try:
         # ── STAGE: extracting ────────────────────────────────────────────────
-        await update_job(
-            settings, job.id, status="running", stage="extracting", progress=5
-        )
+        await update_job(settings, job.id, status="running", stage="extracting", progress=5)
         await normalize_to_wav(job.work_path, wav)
         if cancel.is_set():
             await _mark_cancelled(settings, job)
@@ -148,6 +146,27 @@ async def _run_job(state: Any, job: Any) -> None:
         # ── STAGE: done (terminal status + transcripts row insert) ───────────
         # Phase 4 CORE-08: pass user_id + is_anonymous so progress.update_job
         # can gate the transcripts INSERT (anon jobs stay in jobs.transcript_payload).
+        #
+        # Quick task 260501-1e4 Task 9 (item line 45 of Things-to-change.txt):
+        # transcripts.title and transcripts.source_filename are NOT NULL in
+        # supabase/migrations/20260427181749_transcripts_with_rls.sql, so the
+        # original update_job() call (which omitted them) was failing every
+        # signed-in completion with PostgREST 23502 (not_null_violation),
+        # silently dropping the /history row. Pull both from job.meta + the
+        # detected language from the merged payload, plus diarized from the
+        # incoming options.
+        meta = getattr(job, "meta", {}) or {}
+        opts = meta.get("options") or {}
+        source_filename = meta.get("filename") or meta.get("source_filename") or "upload"
+        # title defaults to the filename (the user can rename from /history).
+        title = meta.get("title") or source_filename
+        diarized = bool(opts.get("diarize", False))
+        language = (
+            (payload.get("language") if isinstance(payload, dict) else None)
+            or opts.get("language")
+            or None
+        )
+        duration_sec = payload.get("duration_sec") if isinstance(payload, dict) else None
         await update_job(
             settings,
             job.id,
@@ -157,6 +176,12 @@ async def _run_job(state: Any, job: Any) -> None:
             transcript_payload=payload,
             user_id=getattr(job, "user_id", None),
             is_anonymous=getattr(job, "is_anonymous", False),
+            # transcripts-row metadata (NOT NULL columns first):
+            title=title,
+            source_filename=source_filename,
+            duration_sec=duration_sec,
+            language=language,
+            diarized=diarized,
         )
 
     finally:

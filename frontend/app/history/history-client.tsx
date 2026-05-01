@@ -6,11 +6,9 @@ import { TranscriptCard } from "@/components/transcribe/history/transcript-card"
 import { HistorySearch } from "@/components/transcribe/history/history-search";
 import { HistoryEmpty } from "@/components/transcribe/history/history-empty";
 import { LoadMoreButton } from "@/components/transcribe/history/load-more-button";
-import {
-  renameTranscript,
-  deleteTranscript,
-} from "@/lib/history/mutations";
+import { renameTranscript, deleteTranscript } from "@/lib/history/mutations";
 import type { TranscriptListItem } from "@/lib/history/queries";
+import { useI18n, format } from "@/lib/i18n/i18n-context";
 
 interface State {
   rows: TranscriptListItem[];
@@ -58,6 +56,7 @@ function Inner({
 }) {
   const router = useRouter();
   const { show } = useToast();
+  const { t } = useI18n();
   const [state, dispatch] = React.useReducer(reducer, {
     rows: initialRows,
     pendingDelete: new Set<string>(),
@@ -69,14 +68,14 @@ function Inner({
     if (!res.ok) {
       // revert via revalidate (server-truth refresh)
       router.refresh();
-      show(`Rename failed: ${res.error}`, { variant: "error" });
+      show(`${t.history_rename_failed}: ${res.error}`, { variant: "error" });
     }
   }
 
   function handleDelete(id: string, title: string) {
     dispatch({ type: "delete-optimistic", id });
     let undone = false;
-    show(`Deleted "${title}".`, {
+    show(format(t.history_deleted_undo, { title }), {
       durationMs: 5000,
       action: {
         label: "Undo",
@@ -92,7 +91,7 @@ function Inner({
       const res = await deleteTranscript(id);
       if (!res.ok) {
         dispatch({ type: "delete-undo", id });
-        show(`Delete failed: ${res.error}`, { variant: "error" });
+        show(`${t.history_delete_failed}: ${res.error}`, { variant: "error" });
       } else {
         router.refresh(); // server truth — drop the row
       }
@@ -107,9 +106,11 @@ function Inner({
       <header className="mb-[22px] flex items-end justify-between gap-4">
         <div>
           <div className="text-[11.5px] font-semibold uppercase tracking-wider text-(--color-fg-3)">
-            Your transcripts
+            {t.history_kicker}
           </div>
-          <h1 className="font-serif text-[38px] leading-[1.05] tracking-tight">History</h1>
+          <h1 className="font-serif text-[38px] leading-[1.05] tracking-tight">
+            {t.history_title}
+          </h1>
         </div>
         <HistorySearch initialValue={initialQuery} />
       </header>
@@ -129,7 +130,7 @@ function Inner({
         </div>
       )}
       <footer className="mt-10 text-center text-[11.5px] text-(--color-fg-4)">
-        Stored in Supabase · synced via Realtime · click any row to open
+        {t.history_footer}
       </footer>
     </div>
   );

@@ -2,6 +2,8 @@
 import * as React from "react";
 import type { EditorState } from "@/lib/editor/reducer";
 import type { SaveStatus } from "@/lib/editor/persist";
+import { useI18n, format } from "@/lib/i18n/i18n-context";
+import type { Messages } from "@/lib/i18n/types";
 
 interface EditorFooterProps {
   state: EditorState;
@@ -9,11 +11,13 @@ interface EditorFooterProps {
   className?: string;
 }
 
-function fmtAgo(seconds: number): string {
-  if (seconds < 1) return "just now";
-  if (seconds < 60) return `${Math.floor(seconds)}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  return `${Math.floor(seconds / 3600)}h ago`;
+function fmtAgo(seconds: number, t: Messages): string {
+  if (seconds < 1) return t.editor_save_just_now;
+  if (seconds < 60)
+    return format(t.editor_save_seconds_ago, { n: Math.floor(seconds) });
+  if (seconds < 3600)
+    return format(t.editor_save_minutes_ago, { n: Math.floor(seconds / 60) });
+  return format(t.editor_save_hours_ago, { n: Math.floor(seconds / 3600) });
 }
 
 function fmtDuration(s: number): string {
@@ -22,7 +26,12 @@ function fmtDuration(s: number): string {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-export function EditorFooter({ state, saveStatus, className }: EditorFooterProps) {
+export function EditorFooter({
+  state,
+  saveStatus,
+  className,
+}: EditorFooterProps) {
+  const { t } = useI18n();
   const wordCount = React.useMemo(
     () =>
       state.segments.reduce(
@@ -56,8 +65,13 @@ export function EditorFooter({ state, saveStatus, className }: EditorFooterProps
       }}
     >
       <div>
-        {wordCount.toLocaleString()} words · {fmtDuration(state.duration_sec)} ·{" "}
-        {state.segments.length} segments
+        {wordCount.toLocaleString()}
+        {t.editor_word_count_words} · {fmtDuration(state.duration_sec)} ·{" "}
+        {state.segments.length === 1
+          ? t.editor_word_count_segments_one
+          : format(t.editor_word_count_segments_n, {
+              n: state.segments.length,
+            })}
       </div>
       <div className="flex items-center gap-2" role="status" aria-live="polite">
         {saveStatus.kind === "saved" ? (
@@ -72,18 +86,18 @@ export function EditorFooter({ state, saveStatus, className }: EditorFooterProps
               }}
             />
             <span>
-              Last saved{" "}
+              {t.editor_save_last_saved_prefix}
               {/* eslint-disable-next-line react-hooks/purity -- intentional: footer tick re-reads Date.now() each render; UI-SPEC §16.7 allows this for "saved Ns ago" */}
-              {fmtAgo((Date.now() - saveStatus.at) / 1000)} · auto-save via
-              localStorage
+              {fmtAgo((Date.now() - saveStatus.at) / 1000, t)}
+              {t.editor_save_autosave_localstorage}
             </span>
           </>
         ) : saveStatus.kind === "error" ? (
           <span style={{ color: "var(--color-warn)" }}>
-            ⚠ Saving locally failed — your edits are not persisted
+            {t.editor_save_failed}
           </span>
         ) : (
-          <span>auto-save via localStorage</span>
+          <span>{t.editor_save_autosave_localstorage.replace(/^ · /, "")}</span>
         )}
       </div>
     </footer>

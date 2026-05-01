@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { ChunkedBar } from "./chunked-bar";
 import { PipelineStepper } from "./pipeline-stepper";
 import { PhaseRow } from "./phase-row";
+import { useI18n, format } from "@/lib/i18n/i18n-context";
+import type { Messages } from "@/lib/i18n/types";
+import type { SubmitErrorKind } from "@/lib/job/submit";
 
 type Phase =
   | "uploading"
@@ -16,6 +19,14 @@ type Phase =
   | "done"
   | "failed"
   | "cancelling";
+
+/** Discriminated error shape (item line 19 — typed errors). The legacy
+ *  string form is still accepted from older callers + existing unit tests
+ *  and is treated as kind=unknown. */
+export type ProcessingError =
+  | string
+  | { kind: SubmitErrorKind | "pipeline"; detail: string }
+  | null;
 
 interface ProcessingCardProps {
   file: File | null;
@@ -29,7 +40,7 @@ interface ProcessingCardProps {
   eta?: string;
   /** Number of jobs ahead in the queue when phase === 'queued' (PROG-04). */
   queueAhead?: number;
-  error?: string | null;
+  error?: ProcessingError;
   onCancel: () => void;
   className?: string;
 }
@@ -48,14 +59,20 @@ function fmtDuration(s: number): string {
     : `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-/** Resolve PhaseRow content per UI-SPEC §10.4 stage mapping. */
-function phaseRowContent(props: {
-  phase: Phase;
-  progress: number;
-  uploadPct: number;
-  queueAhead: number;
-  error?: string | null;
-}): {
+/** Resolve PhaseRow content per UI-SPEC §10.4 stage mapping.
+ *  Pure function of state + locale catalog — keeps phaseRowContent unit-
+ *  testable without mounting an I18nProvider. Existing tests pass an English
+ *  catalog (or the default exported EN_MESSAGES) to keep assertions stable. */
+function phaseRowContent(
+  props: {
+    phase: Phase;
+    progress: number;
+    uploadPct: number;
+    queueAhead: number;
+    error?: ProcessingError;
+  },
+  t: Messages,
+): {
   title: string;
   detail: string;
   pct?: number;
@@ -66,61 +83,83 @@ function phaseRowContent(props: {
   const { phase, progress, uploadPct, queueAhead, error } = props;
 
   if (phase === "failed") {
+    // Pick a localized title per error.kind. Legacy string-only callers
+    // (older tests) fall through to the default "Transcription failed" title.
+    const e =
+      typeof error === "string"
+        ? { kind: "unknown" as const, detail: error }
+        : (error ?? { kind: "unknown" as const, detail: "" });
+    const title =
+      e.kind === "backend-unreachable"
+        ? t.err_backend_unreachable_title
+        : e.kind === "auth-failed"
+          ? t.err_auth_failed_title
+          : e.kind === "upload-failed"
+            ? t.err_upload_failed_title
+            : e.kind === "validation-failed"
+              ? t.err_validation_failed_title
+              : e.kind === "pipeline"
+                ? t.err_pipeline_failed_title
+                : t.phase_failed_title;
     return {
-      title: "Transcription failed",
-      detail: error ?? "Unknown error",
+      title,
+      detail: e.detail || t.err_unknown_body,
       error: true,
     };
   }
   if (phase === "cancelling") {
     return {
-      title: "Cancelling…",
-      detail: "Stopping the worker; partial output discarded",
+      title: t.phase_cancelling_title,
+      detail: t.phase_cancelling_detail,
       pulse: true,
     };
   }
   if (phase === "uploading") {
     return {
-      title: "Uploading to home-gpu-01",
-      detail: "Resumable chunked upload via Cloudflare Quick Tunnel",
+      title: t.phase_uploading_title,
+      detail: t.phase_uploading_detail,
       pct: uploadPct,
     };
   }
   if (phase === "queued") {
     return {
-      title: "Queued",
+      title: t.phase_queued_title,
       detail:
         queueAhead > 0
-          ? `Waiting for GPU — ${queueAhead} ${queueAhead === 1 ? "job" : "jobs"} ahead`
-          : "Waiting for GPU",
+          ? queueAhead === 1
+            ? t.phase_queued_jobs_ahead_one
+            : format(t.phase_queued_jobs_ahead_n, { n: queueAhead })
+          : t.phase_queued_waiting_for_gpu,
       pulse: true,
     };
   }
   if (phase === "transcribing") {
     return {
-      title: "Transcribing with whisper.cpp",
-      detail: `Realtime factor — · processed ${Math.floor(progress)}%`,
+      title: t.phase_transcribing_title,
+      detail: format(t.phase_transcribing_detail, {
+        pct: Math.floor(progress),
+      }),
       pct: progress,
     };
   }
   if (phase === "diarizing") {
     return {
-      title: "Diarizing with pyannote 3.4",
-      detail: "Detected speakers · clustering segments",
+      title: t.phase_diarizing_title,
+      detail: t.phase_diarizing_detail,
       pct: progress,
     };
   }
   if (phase === "merging") {
     return {
-      title: "Merging segments",
-      detail: "Aligning words to speakers",
+      title: t.phase_merging_title,
+      detail: t.phase_merging_detail,
       pct: progress,
     };
   }
   // done
   return {
-    title: "Done — opening editor",
-    detail: "Loading transcript…",
+    title: t.phase_done_title,
+    detail: t.phase_done_detail,
     done: true,
   };
 }
@@ -139,13 +178,22 @@ export function ProcessingCard({
   onCancel,
   className,
 }: ProcessingCardProps) {
-  const content = phaseRowContent({ phase, progress, uploadPct, queueAhead, error });
+  const { t } = useI18n();
+  const content = phaseRowContent(
+    { phase, progress, uploadPct, queueAhead, error },
+    t,
+  );
   const showChunkedBar = phase === "uploading";
 
   return (
     <div
       className={className}
-      style={{ display: "grid", gap: 14, justifyItems: "center", width: "100%" }}
+      style={{
+        display: "grid",
+        gap: 14,
+        justifyItems: "center",
+        width: "100%",
+      }}
     >
       {/* File header card — processing.jsx lines 69-112 */}
       {file ? (
@@ -186,7 +234,7 @@ export function ProcessingCard({
             {eta ? (
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontSize: 11.5, color: "var(--color-fg-3)" }}>
-                  est. remaining
+                  {t.processing_est_remaining}
                 </div>
                 <div
                   className="mono"
@@ -218,8 +266,10 @@ export function ProcessingCard({
               >
                 <span>
                   {uploadPct >= 100
-                    ? "upload complete"
-                    : `chunk ${Math.min(64, Math.ceil(uploadPct / 1.6))}/64`}
+                    ? t.upload_complete
+                    : format(t.upload_chunk_n_of_64, {
+                        n: Math.min(64, Math.ceil(uploadPct / 1.6)),
+                      })}
                 </span>
                 <span>{Math.round(uploadPct)}%</span>
               </div>
@@ -238,8 +288,14 @@ export function ProcessingCard({
             marginBottom: 20,
           }}
         >
-          <div style={{ fontSize: 13, fontWeight: 500, color: "var(--color-fg-0)" }}>
-            Pipeline
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: "var(--color-fg-0)",
+            }}
+          >
+            {t.pipeline_label}
           </div>
           <div
             className="mono"
@@ -254,16 +310,21 @@ export function ProcessingCard({
         </div>
       </Card>
 
-      {/* Cancel — UI-SPEC §10.5 */}
+      {/* Cancel — UI-SPEC §10.5.
+          In phase=failed we enable the button and relabel it "Back to upload"
+          (item line 21 of Things-to-change.txt) so the user has a way out
+          when the pipeline screen reports an error. */}
       <Button
         variant="ghost"
         size="sm"
         onClick={onCancel}
-        disabled={phase === "done" || phase === "failed" || phase === "cancelling"}
-        aria-label="Cancel job"
+        disabled={phase === "done" || phase === "cancelling"}
+        aria-label={
+          phase === "failed" ? t.cancel_back_to_upload : t.cancel_aria
+        }
         style={{ color: "var(--color-fg-3)" }}
       >
-        Cancel job
+        {phase === "failed" ? t.cancel_back_to_upload : t.cancel_job}
       </Button>
     </div>
   );

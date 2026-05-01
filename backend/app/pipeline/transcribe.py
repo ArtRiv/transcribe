@@ -51,6 +51,43 @@ def _threads() -> int:
 _TAIL_BYTES = 8 * 1024  # bytes of subprocess output retained for error context
 
 
+def _build_whisper_args(
+    bin_path: str,
+    model_path: str,
+    wav_path: Path,
+    json_out: Path,
+    *,
+    language: str | None,
+    vad_model_path: str,
+) -> list[str]:
+    """Build the whisper-cli argv list. Pure function — extracted for test
+    coverage of the language-flag default behaviour.
+
+    Quick task 260430-noo: whisper-cli's `--language` defaults to "en" when
+    omitted (verified via `whisper-cli --help`). Skipping the flag for
+    non-English audio causes Portuguese (and other) inputs to be transcribed
+    as English. Always pass the flag, defaulting to "auto" so detection runs.
+    """
+    return [
+        bin_path,
+        "--model",
+        model_path,
+        "--file",
+        str(wav_path),
+        "--output-json-full",
+        "--output-file",
+        str(json_out.with_suffix("")),
+        "--print-progress",
+        "--vad",
+        "--vad-model",
+        vad_model_path,
+        "--threads",
+        str(_threads()),
+        "--language",
+        language if language else "auto",
+    ]
+
+
 async def transcribe_subprocess(
     bin_path: str,
     model_path: str,
@@ -83,25 +120,14 @@ async def transcribe_subprocess(
         )
 
     json_out = wav_path.with_suffix(".json")
-    args: list[str] = [
+    args = _build_whisper_args(
         bin_path,
-        "--model",
         model_path,
-        "--file",
-        str(wav_path),
-        "--output-json-full",
-        # whisper-cli appends ".json" to the --output-file path itself
-        "--output-file",
-        str(json_out.with_suffix("")),
-        "--print-progress",
-        "--vad",  # Pitfall 5 — silence-hallucination mitigation
-        "--vad-model",
-        vad_model_path,
-        "--threads",
-        str(_threads()),
-    ]
-    if language and language != "auto":
-        args += ["--language", language]
+        wav_path,
+        json_out,
+        language=language,
+        vad_model_path=vad_model_path,
+    )
 
     proc = await asyncio.create_subprocess_exec(
         *args,

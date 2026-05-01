@@ -8,6 +8,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SignInPopover } from "./sign-in-popover";
 import { signOut } from "@/lib/auth/actions";
+import { useI18n } from "@/lib/i18n/i18n-context";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -55,6 +56,7 @@ function chipColorVar(userId: string): string {
  * - Signed-in (is_anonymous=false) → initials chip + name + chevron → opens DropdownMenu
  */
 export function UserButton({ user }: { user: UserLite | null }) {
+  const { t } = useI18n();
   const isSignedIn = user !== null && !user.is_anonymous;
 
   if (!isSignedIn) {
@@ -62,7 +64,7 @@ export function UserButton({ user }: { user: UserLite | null }) {
       <SignInPopover
         trigger={
           <Button variant="default" size="default">
-            Sign in
+            {t.user_sign_in}
           </Button>
         }
       />
@@ -121,13 +123,13 @@ export function UserButton({ user }: { user: UserLite | null }) {
             <DropdownMenuItem
               render={(props: React.HTMLAttributes<HTMLElement>) => (
                 <Link href="/history" {...props}>
-                  ↗ History
+                  ↗ {t.user_history}
                 </Link>
               )}
             />
             {/* Sign out */}
             <DropdownMenuItem onClick={() => void signOut()}>
-              ⎋ Sign out
+              ⎋ {t.user_sign_out}
             </DropdownMenuItem>
           </DropdownMenuPopup>
         </DropdownMenuPositioner>

@@ -1,12 +1,15 @@
 "use client";
 import * as React from "react";
-import { ChevronDown, SlidersHorizontal } from "lucide-react";
+import { ChevronDown, SlidersHorizontal, Info } from "lucide-react";
 import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { Range } from "@/components/ui/range";
 import { Select } from "@/components/ui/select";
+import * as Tooltip from "@/components/ui/tooltip";
 import { OptionRow } from "./option-row";
 import type { JobOptions, PresetName } from "@/lib/job/submit";
+import { useI18n, format } from "@/lib/i18n/i18n-context";
+import type { Messages } from "@/lib/i18n/types";
 
 interface OptionsPanelProps {
   options: JobOptions;
@@ -44,49 +47,80 @@ const PRESET_TO_UI: Record<PresetName, PresetUiValue> = {
 /**
  * Quality preset options — UI-SPEC §13.1 hints + UI-SPEC §10.2 value mapping.
  * Best is gated off in Phase 3 (OPTS-07); Phase 4 unlocks via bestUnlocked prop.
+ *
+ * Hint for the disabled "Best" pill changed during quick task 260501-1e4 from
+ * "8 GB VRAM only · ~1.4× realtime" to "~10 GB VRAM · ~1.4× realtime" — the
+ * old wording was misleading because Best needs MORE than 8 GB; this host's
+ * 8 GB AMD RX 6600 is the reason the preset is gated off, not the requirement.
  */
-function presetOptions(bestUnlocked: boolean): Array<{
+function presetOptions(
+  t: Messages,
+  bestUnlocked: boolean,
+): Array<{
   value: PresetUiValue;
   label: string;
   hint: string;
   disabled?: boolean;
 }> {
   return [
-    { value: "fast", label: "Fast", hint: "tiny, ~10× realtime" },
-    { value: "balanced", label: "Balanced", hint: "small, ~3× realtime" },
+    {
+      value: "fast",
+      label: t.options_preset_fast,
+      hint: t.options_preset_fast_hint,
+    },
+    {
+      value: "balanced",
+      label: t.options_preset_balanced,
+      hint: t.options_preset_balanced_hint,
+    },
     {
       value: "best",
-      label: "Best",
-      hint: bestUnlocked ? "large-v3" : "8 GB VRAM only · ~1.4× realtime",
+      label: t.options_preset_best,
+      hint: bestUnlocked
+        ? t.options_preset_best_hint_unlocked
+        : t.options_preset_best_hint_disabled,
       disabled: !bestUnlocked,
     },
   ];
 }
 
-/** Languages — UI-SPEC §13.1 list + auto-detect default. */
-const LANGUAGES = [
-  { value: "", label: "Auto-detect" },
-  { value: "en", label: "English" },
-  { value: "es", label: "Spanish" },
-  { value: "pt", label: "Portuguese" },
-  { value: "fr", label: "French" },
-  { value: "de", label: "German" },
-  { value: "ja", label: "Japanese" },
-  { value: "zh", label: "Chinese" },
-];
+/** Languages — UI-SPEC §13.1 list + auto-detect default. The OPTION LABELS
+ *  here are the recording language (what the audio is in), separate from the
+ *  UI locale. We show language names in the UI's locale per Web convention
+ *  (Portuguese-speaking users see "Inglês"/"Português"). */
+function languages(t: Messages, locale: "en" | "pt-BR") {
+  const isPt = locale === "pt-BR";
+  return [
+    { value: "", label: t.options_language_auto },
+    { value: "en", label: isPt ? "Inglês" : "English" },
+    { value: "es", label: isPt ? "Espanhol" : "Spanish" },
+    { value: "pt", label: isPt ? "Português" : "Portuguese" },
+    { value: "fr", label: isPt ? "Francês" : "French" },
+    { value: "de", label: isPt ? "Alemão" : "German" },
+    { value: "ja", label: isPt ? "Japonês" : "Japanese" },
+    { value: "zh", label: isPt ? "Chinês" : "Chinese" },
+  ];
+}
 
 /** UI-SPEC §9.2 line 476 — disclosure summary text. */
-function summarizeOptions(options: JobOptions): string {
+function summarizeOptions(
+  options: JobOptions,
+  t: Messages,
+  langs: ReturnType<typeof languages>,
+): string {
   const presetLabel =
     PRESET_TO_UI[options.preset] === "fast"
-      ? "Fast"
+      ? t.options_preset_fast
       : PRESET_TO_UI[options.preset] === "best"
-        ? "Best"
-        : "Balanced";
+        ? t.options_preset_best
+        : t.options_preset_balanced;
   const langLabel =
-    LANGUAGES.find((l) => l.value === (options.language ?? ""))?.label ??
-    "Auto-detect";
-  return `${presetLabel}, ${langLabel}, diarization ${options.diarize ? "on" : "off"}`;
+    langs.find((l) => l.value === (options.language ?? ""))?.label ??
+    t.options_language_auto;
+  const diar = options.diarize
+    ? t.options_summary_diar_on
+    : t.options_summary_diar_off;
+  return `${presetLabel}, ${langLabel}, ${diar}`;
 }
 
 export function OptionsPanel({
@@ -96,9 +130,18 @@ export function OptionsPanel({
   defaultOpen = false,
   className,
 }: OptionsPanelProps) {
+  const { locale, t } = useI18n();
   const presetUi = PRESET_TO_UI[options.preset];
   const [open, setOpen] = React.useState(defaultOpen);
-  const summary = summarizeOptions(options);
+  // Advanced sub-accordion (item line 15 of Things-to-change.txt).
+  // Collapsed by default — most users will not override the preset.
+  const [advancedOpen, setAdvancedOpen] = React.useState(false);
+  const langs = React.useMemo(() => languages(t, locale), [t, locale]);
+  const summary = summarizeOptions(options, t, langs);
+  const presetItems = React.useMemo(
+    () => presetOptions(t, bestUnlocked),
+    [t, bestUnlocked],
+  );
 
   return (
     <div className={className}>
@@ -112,7 +155,7 @@ export function OptionsPanel({
       >
         <span className="inline-flex items-center" style={{ gap: 7 }}>
           <SlidersHorizontal size={14} aria-hidden="true" />
-          <span>Options</span>
+          <span>{t.options_label}</span>
           <span
             style={{
               color: "var(--color-fg-4)",
@@ -147,23 +190,48 @@ export function OptionsPanel({
             animation: "fade 240ms ease",
           }}
         >
-          {/* OPTS-01, OPTS-02 — Quality preset */}
-          <OptionRow label="Quality" hint="Choose speed vs accuracy">
+          {/* OPTS-01, OPTS-02 — Quality preset.
+              When Best is gated off (the common case on this 8 GB host) we
+              render a small info icon next to the segmented control with a
+              tooltip explaining why — item line 13 of Things-to-change.txt.
+              The icon is a real button so it captures keyboard focus + the
+              Tooltip primitive's aria-describedby wiring works for AT users. */}
+          <OptionRow label={t.options_quality} hint={t.options_quality_hint}>
             <Segmented<PresetUiValue>
-              options={presetOptions(bestUnlocked)}
+              options={presetItems}
               value={presetUi}
               onValueChange={(v) =>
                 onChange({ ...options, preset: UI_TO_PRESET[v] })
               }
               aria-label="Quality preset"
             />
+            {!bestUnlocked ? (
+              <Tooltip.Root>
+                <Tooltip.Trigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={t.options_preset_best_disabled_tooltip}
+                      className="inline-flex items-center justify-center rounded-full hover:bg-(--color-bg-3) cursor-help"
+                      style={{
+                        width: 18,
+                        height: 18,
+                        color: "var(--color-fg-3)",
+                      }}
+                    >
+                      <Info size={12} aria-hidden />
+                    </button>
+                  }
+                />
+                <Tooltip.Panel className="max-w-[280px]">
+                  {t.options_preset_best_disabled_tooltip}
+                </Tooltip.Panel>
+              </Tooltip.Root>
+            ) : null}
           </OptionRow>
 
           {/* OPTS-05, OPTS-06 — Language */}
-          <OptionRow
-            label="Language"
-            hint="Auto-detect works for 90+ languages."
-          >
+          <OptionRow label={t.options_language} hint={t.options_language_hint}>
             <Select
               value={options.language ?? ""}
               onChange={(e) =>
@@ -174,7 +242,7 @@ export function OptionsPanel({
               }
               aria-label="Spoken language"
             >
-              {LANGUAGES.map((l) => (
+              {langs.map((l) => (
                 <option key={l.value} value={l.value}>
                   {l.label}
                 </option>
@@ -184,8 +252,8 @@ export function OptionsPanel({
 
           {/* OPTS-03 — Diarization */}
           <OptionRow
-            label="Diarization"
-            hint="Splits the transcript into who-said-what segments using pyannote."
+            label={t.options_diarization}
+            hint={t.options_diarization_hint}
           >
             <Switch
               checked={options.diarize}
@@ -198,8 +266,8 @@ export function OptionsPanel({
 
           {/* OPTS-04 — Estimated speakers (disabled when diarize off) */}
           <OptionRow
-            label="Estimated speakers"
-            hint="Leave on Auto unless you know exactly how many people are on the recording."
+            label={t.options_speakers}
+            hint={t.options_speakers_hint}
             disabled={!options.diarize}
           >
             <Range
@@ -208,7 +276,11 @@ export function OptionsPanel({
               step={1}
               value={options.num_speakers ?? 0}
               disabled={!options.diarize}
-              valueText={(options.num_speakers ?? 0) === 0 ? "Auto" : undefined}
+              valueText={
+                (options.num_speakers ?? 0) === 0
+                  ? t.options_speakers_auto
+                  : undefined
+              }
               onChange={(e) => {
                 const n = parseInt(e.target.value, 10);
                 onChange({ ...options, num_speakers: n });
@@ -226,10 +298,95 @@ export function OptionsPanel({
               }}
             >
               {(options.num_speakers ?? 0) === 0
-                ? "Auto"
-                : `${options.num_speakers} speaker${options.num_speakers === 1 ? "" : "s"}`}
+                ? t.options_speakers_auto
+                : (options.num_speakers ?? 0) === 1
+                  ? t.options_speakers_one
+                  : format(t.options_speakers_n, {
+                      n: options.num_speakers ?? 0,
+                    })}
             </span>
           </OptionRow>
+
+          {/* Advanced sub-accordion — item line 15 of Things-to-change.txt.
+              Purely additive: the model picker forwards the chosen value to
+              the backend in BOTH multipart and TUS metadata via lib/job/submit
+              under key "model". The backend currently ignores the field —
+              landing the UI surface unblocks future per-model gating without
+              another frontend redeploy. */}
+          <details
+            open={advancedOpen}
+            onToggle={(e) =>
+              setAdvancedOpen((e.currentTarget as HTMLDetailsElement).open)
+            }
+            style={{
+              borderTop: "1px solid var(--color-line)",
+              paddingTop: 12,
+              marginTop: 4,
+            }}
+          >
+            <summary
+              className="cursor-pointer inline-flex items-center gap-1.5 select-none"
+              style={{
+                color: "var(--color-fg-2)",
+                fontSize: 12.5,
+                fontWeight: 500,
+                listStyle: "none",
+              }}
+            >
+              <ChevronDown
+                size={12}
+                aria-hidden="true"
+                style={{
+                  transform: advancedOpen ? "rotate(180deg)" : "rotate(-90deg)",
+                  transition: "transform 150ms ease",
+                }}
+              />
+              {t.options_advanced}
+            </summary>
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <OptionRow
+                label={t.options_model_picker_label}
+                hint={t.options_model_picker_hint}
+              >
+                <Select
+                  value={options.model ?? ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...options,
+                      model: e.target.value || undefined,
+                    })
+                  }
+                  aria-label="Model override"
+                >
+                  <option value="">— use preset —</option>
+                  <option value="tiny">
+                    Tiny — 1 GB VRAM, ~30× realtime, drafty
+                  </option>
+                  <option value="base">Base — 1 GB VRAM, ~25× realtime</option>
+                  <option value="small">
+                    Small — 2 GB VRAM, ~20× realtime (Fast preset)
+                  </option>
+                  <option value="medium">
+                    Medium — 5 GB VRAM, ~10× realtime
+                  </option>
+                  <option value="large-v3-turbo">
+                    Large-v3-turbo — ~6 GB VRAM, ~30–60× batched (Balanced
+                    preset)
+                  </option>
+                  <option value="large-v3" disabled>
+                    Large-v3 — ~10 GB VRAM (disabled on this 8 GB host)
+                  </option>
+                </Select>
+              </OptionRow>
+            </div>
+          </details>
         </div>
       ) : null}
     </div>

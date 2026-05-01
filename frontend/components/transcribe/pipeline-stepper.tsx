@@ -1,5 +1,7 @@
 "use client";
 import * as React from "react";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Messages } from "@/lib/i18n/types";
 
 type StepKey = "uploading" | "queued" | "transcribing" | "diarizing" | "done";
 
@@ -8,14 +10,17 @@ interface Step {
   label: string;
 }
 
-/** UI-SPEC §10.4 — 5 steps map; spec processing.jsx lines 51-57. */
-const STEPS: readonly Step[] = [
-  { key: "uploading", label: "Uploading" },
-  { key: "queued", label: "Queued" },
-  { key: "transcribing", label: "Transcribing" },
-  { key: "diarizing", label: "Diarizing" },
-  { key: "done", label: "Done" },
-];
+/** UI-SPEC §10.4 — 5 steps map; spec processing.jsx lines 51-57.
+ *  Built from the i18n catalog at render time so locale changes propagate. */
+function buildSteps(t: Messages): readonly Step[] {
+  return [
+    { key: "uploading", label: t.pipeline_step_uploading },
+    { key: "queued", label: t.pipeline_step_queued },
+    { key: "transcribing", label: t.pipeline_step_transcribing },
+    { key: "diarizing", label: t.pipeline_step_diarizing },
+    { key: "done", label: t.pipeline_step_done },
+  ];
+}
 
 interface PipelineStepperProps {
   currentStage:
@@ -37,13 +42,21 @@ function reconcileStage(s: PipelineStepperProps["currentStage"]): StepKey {
   return s;
 }
 
-function stepState(idx: number, currentIdx: number): "pending" | "active" | "done" {
+function stepState(
+  idx: number,
+  currentIdx: number,
+): "pending" | "active" | "done" {
   if (idx < currentIdx) return "done";
   if (idx === currentIdx) return "active";
   return "pending";
 }
 
-export function PipelineStepper({ currentStage, className }: PipelineStepperProps) {
+export function PipelineStepper({
+  currentStage,
+  className,
+}: PipelineStepperProps) {
+  const { t } = useI18n();
+  const STEPS = React.useMemo(() => buildSteps(t), [t]);
   const reconciled = reconcileStage(currentStage);
   const currentIdx = STEPS.findIndex((s) => s.key === reconciled);
 
@@ -86,7 +99,9 @@ export function PipelineStepper({ currentStage, className }: PipelineStepperProp
                   left: "calc(50% + 18px)",
                   right: "calc(-50% + 18px)",
                   height: 1.5,
-                  background: isDone ? "var(--color-accent)" : "var(--color-line)",
+                  background: isDone
+                    ? "var(--color-accent)"
+                    : "var(--color-line)",
                   transition: "background 300ms",
                 }}
               />
@@ -113,7 +128,9 @@ export function PipelineStepper({ currentStage, className }: PipelineStepperProp
                   ? "1.5px solid var(--color-accent)"
                   : `1.5px solid ${isDone ? "var(--color-accent)" : "var(--color-line)"}`,
                 transition: "background 300ms, border-color 300ms, color 300ms",
-                animation: isActive ? "ringPulse 1.6s ease-in-out infinite" : "none",
+                animation: isActive
+                  ? "ringPulse 1.6s ease-in-out infinite"
+                  : "none",
               }}
             >
               {isDone ? (
@@ -139,7 +156,9 @@ export function PipelineStepper({ currentStage, className }: PipelineStepperProp
                     width: 6,
                     height: 6,
                     borderRadius: "50%",
-                    background: isActive ? "var(--color-accent)" : "var(--color-fg-4)",
+                    background: isActive
+                      ? "var(--color-accent)"
+                      : "var(--color-fg-4)",
                   }}
                 />
               )}

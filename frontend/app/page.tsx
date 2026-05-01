@@ -10,11 +10,17 @@ import { UploadZone } from "@/components/transcribe/upload-zone";
 import { OptionsPanel } from "@/components/transcribe/options-panel";
 import { ProcessingCard } from "@/components/transcribe/processing-card";
 import { Button } from "@/components/ui/button";
-import { submitJob, type JobOptions } from "@/lib/job/submit";
+import {
+  submitJob,
+  SubmitError,
+  type JobOptions,
+  type SubmitErrorKind,
+} from "@/lib/job/submit";
 import { subscribeToJob, type JobRow } from "@/lib/supabase/realtime-client";
 import { useEditorStore } from "@/lib/editor/store";
 import { env } from "@/lib/env";
 import { ensureAnonymousSession } from "@/lib/auth/anonymous";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 type Phase =
   | "idle"
@@ -27,6 +33,12 @@ type Phase =
   | "failed"
   | "cancelling";
 
+/** Discriminated error union surfaced in PageState. */
+export interface PageErrorState {
+  kind: SubmitErrorKind | "pipeline";
+  detail: string;
+}
+
 interface PageState {
   phase: Phase;
   file: File | null;
@@ -36,8 +48,18 @@ interface PageState {
   uploadPct: number;
   progress: number;
   queueAhead: number;
-  error: string | null;
+  /** Typed error so ProcessingCard can pick a localized title (item line 19
+   *  of Things-to-change.txt — "show me what's actually going on"). The
+   *  string-only fallback before the quick-task pass produced "Unknown
+   *  error" for every backend-down case. */
+  error: PageErrorState | null;
   validationError: string | null;
+  /** Set true at the top of onSubmit and false only on error.
+   *  While true the Start button is disabled and reads "Starting…" so a
+   *  rapid second click cannot fire a second POST /jobs (item line 23 of
+   *  Things-to-change.txt). The success path transitions to phase='uploading'
+   *  which already takes the idle render off-screen. */
+  submitting: boolean;
 }
 
 type PageAction =
@@ -46,10 +68,11 @@ type PageAction =
   | { type: "set_duration"; duration: number }
   | { type: "set_options"; options: JobOptions }
   | { type: "set_validation_error"; error: string | null }
+  | { type: "submitting" }
   | { type: "submit_start"; jobId: string }
   | { type: "set_upload_pct"; pct: number }
   | { type: "realtime_update"; row: JobRow; queueAhead: number }
-  | { type: "submit_error"; error: string }
+  | { type: "submit_error"; error: PageErrorState }
   | { type: "cancel_start" }
   | { type: "cancelled" }
   | { type: "reset" };
@@ -65,6 +88,7 @@ const initialState: PageState = {
   queueAhead: 0,
   error: null,
   validationError: null,
+  submitting: false,
 };
 
 function reduce(s: PageState, a: PageAction): PageState {
@@ -79,6 +103,8 @@ function reduce(s: PageState, a: PageAction): PageState {
       return { ...s, options: a.options };
     case "set_validation_error":
       return { ...s, validationError: a.error };
+    case "submitting":
+      return { ...s, submitting: true, error: null };
     case "submit_start":
       return {
         ...s,
@@ -87,6 +113,9 @@ function reduce(s: PageState, a: PageAction): PageState {
         uploadPct: 0,
         progress: 0,
         error: null,
+        // Once we've transitioned to the processing screen the idle button is
+        // off-screen, so flipping submitting back is harmless and tidy.
+        submitting: false,
       };
     case "set_upload_pct":
       return { ...s, uploadPct: a.pct };
@@ -100,7 +129,10 @@ function reduce(s: PageState, a: PageAction): PageState {
         return {
           ...s,
           phase: "failed",
-          error: row.error ?? "Unknown error",
+          // Backend pipeline failures (whisper.cpp crash, ffmpeg fail, etc.)
+          // map to the "pipeline" kind so ProcessingCard renders the generic
+          // pipeline-failed title plus the raw detail line.
+          error: { kind: "pipeline", detail: row.error ?? "" },
           progress: row.progress,
         };
       }
@@ -126,7 +158,7 @@ function reduce(s: PageState, a: PageAction): PageState {
       return s;
     }
     case "submit_error":
-      return { ...s, phase: "failed", error: a.error };
+      return { ...s, phase: "failed", error: a.error, submitting: false };
     case "cancel_start":
       return { ...s, phase: "cancelling" };
     case "cancelled":
@@ -137,21 +169,35 @@ function reduce(s: PageState, a: PageAction): PageState {
         options: s.options,
       };
     case "reset":
-      return { ...initialState, options: s.options };
+      // Preserve the file/duration/options so Cancel-from-failed (Task 5 / item
+      // line 21) returns the user to the upload screen with their file still
+      // selected — they can tweak options or just retry without re-picking.
+      return {
+        ...initialState,
+        file: s.file,
+        duration: s.duration,
+        options: s.options,
+      };
   }
 }
 
-/** Validate file pre-submit (CORE-03). */
+/** Validate file pre-submit (CORE-03).
+ *  Mirror backend/app/routes/tus.py + jobs.py ALLOWED_EXTENSIONS — keep this
+ *  list byte-identical to the backend, otherwise users hit the dropzone-accept
+ *  path with a file the server will reject (item line 5 of Things-to-change.txt). */
 const ALLOWED_EXTS = new Set([
   "mp3",
   "m4a",
   "wav",
-  "mp4",
-  "mov",
-  "webm",
-  "ogg",
   "flac",
+  "ogg",
   "aac",
+  "mpga",
+  "mp4",
+  "mkv",
+  "webm",
+  "mov",
+  "avi",
 ]);
 const MAX_DURATION_SEC = 5 * 60 * 60; // 5 hours
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
@@ -159,7 +205,7 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 * 1024; // 5 GB
 function validate(file: File, duration: number | null): string | null {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   if (!ALLOWED_EXTS.has(ext)) {
-    return `${file.name} isn't a supported audio or video file. Try mp3, m4a, wav, mp4, mov, or webm.`;
+    return `${file.name} isn't a supported audio or video file. Try mp3, m4a, wav, flac, ogg, aac, mp4, mkv, webm, mov, or avi.`;
   }
   if (file.size > MAX_FILE_SIZE_BYTES) {
     return `Files over ${MAX_FILE_SIZE_BYTES / (1024 * 1024 * 1024)} GB or 5 hours can't process here. Trim it down or split it first.`;
@@ -201,6 +247,7 @@ async function subscribeJobScoped(
 
 export default function HomePage() {
   const router = useRouter();
+  const { t } = useI18n();
   const [state, dispatch] = React.useReducer(reduce, initialState);
   const setFileRef = useEditorStore((s) => s.setFile);
   const tusHandleRef = React.useRef<tus.Upload | null>(null);
@@ -259,7 +306,10 @@ export default function HomePage() {
   }, [state.file, state.duration]);
 
   const onSubmit = React.useCallback(async () => {
-    if (!state.file || state.validationError) return;
+    if (!state.file || state.validationError || state.submitting) return;
+    // Flip submitting=true synchronously BEFORE any await so a rapid second click
+    // (the user's Things-to-change.txt line 23 report) hits the disabled button.
+    dispatch({ type: "submitting" });
     try {
       // AUTH-01: lazy anonymous bootstrap — ensures a valid JWT before any job is created.
       // ensureAnonymousSession() is idempotent: returns the existing user.id if already signed in.
@@ -275,7 +325,13 @@ export default function HomePage() {
           dispatch({ type: "set_upload_pct", pct: 100 });
         },
         onError: (err) => {
-          dispatch({ type: "submit_error", error: err.message });
+          dispatch({
+            type: "submit_error",
+            error:
+              err instanceof SubmitError
+                ? { kind: err.kind, detail: err.message }
+                : { kind: "unknown", detail: err.message },
+          });
         },
       });
       tusHandleRef.current = result.uploadHandle ?? null;
@@ -285,12 +341,33 @@ export default function HomePage() {
     } catch (err) {
       dispatch({
         type: "submit_error",
-        error: err instanceof Error ? err.message : "Submit failed",
+        error:
+          err instanceof SubmitError
+            ? { kind: err.kind, detail: err.message }
+            : {
+                kind: "unknown",
+                detail: err instanceof Error ? err.message : String(err),
+              },
       });
     }
-  }, [state.file, state.options, state.validationError, setFileRef]);
+  }, [
+    state.file,
+    state.options,
+    state.validationError,
+    state.submitting,
+    setFileRef,
+  ]);
 
   const onCancel = React.useCallback(async () => {
+    // Item line 21 of Things-to-change.txt: "when it shows the error in the
+    // transcription pipeline screen, I cant go back because the cancel button
+    // is disabled". Fix: in the failed state Cancel becomes "Back to upload"
+    // and short-circuits to a reset (the upload + DELETE /jobs both already
+    // failed, so trying again would just produce another error).
+    if (state.phase === "failed") {
+      dispatch({ type: "reset" });
+      return;
+    }
     dispatch({ type: "cancel_start" });
     // Fire-and-forget abort per RESEARCH §Pattern 3 line 521.
     if (tusHandleRef.current) {
@@ -309,20 +386,33 @@ export default function HomePage() {
         // back to idle.
       }
     }
-  }, [state.jobId]);
+  }, [state.jobId, state.phase]);
 
-  // ETA estimation (UI-SPEC §13.1) — naive: duration_min × preset_factor
+  // ETA estimation (item line 17 of Things-to-change.txt — the original naive
+  // formula bottomed out at "~1 min" for every clip <3 min, so a 30s sample
+  // and a 3-min meeting both reported the same number).
+  //
+  // Realtime factors per .planning/research/SUMMARY.md "Quality / Speed Presets":
+  //   fast (small):           ~30× realtime  → ASR factor = 1/30 ≈ 0.033
+  //   average (large-v3-turbo): ~45× realtime → ASR factor = 1/45 ≈ 0.022
+  //   slow (large-v3):        ~15× realtime  → ASR factor = 1/15 ≈ 0.067
+  // Diarization runs on CPU (D-04) and adds ~0.5× realtime when enabled.
+  // The result scales linearly with duration AND switches with diarize, so
+  // a 30s clip with diarize=on shows "~15 s" while a 3-min clip shows "~2 min".
   const eta = React.useMemo(() => {
     if (!state.duration) return undefined;
-    const factor =
+    const asrFactor =
       state.options.preset === "fast"
-        ? 0.1
+        ? 1 / 30
         : state.options.preset === "slow"
-          ? 1.4
-          : 0.33;
-    const minutes = Math.max(1, Math.round((state.duration / 60) * factor));
-    return `~${minutes} min`;
-  }, [state.duration, state.options.preset]);
+          ? 1 / 15
+          : 1 / 45;
+    const asrSec = state.duration * asrFactor;
+    const diarSec = state.options.diarize ? state.duration * 0.5 : 0;
+    const totalSec = Math.max(5, asrSec + diarSec);
+    if (totalSec < 60) return `~${Math.round(totalSec)} s`;
+    return `~${Math.max(1, Math.round(totalSec / 60))} min`;
+  }, [state.duration, state.options.preset, state.options.diarize]);
 
   // RENDER — landing branch
   if (state.phase === "idle") {
@@ -357,15 +447,22 @@ export default function HomePage() {
             <Button
               variant="primary"
               onClick={onSubmit}
-              disabled={!state.file || !!state.validationError}
-              aria-label="Start transcription"
-              className="h-10 px-[22px] text-[14px]"
+              disabled={
+                !state.file || !!state.validationError || state.submitting
+              }
+              aria-label={t.start_transcription_aria}
+              aria-busy={state.submitting || undefined}
+              className="h-10 px-[22px] text-[14px] cursor-pointer disabled:cursor-not-allowed"
             >
-              Start transcription →
+              {state.submitting
+                ? t.start_transcription_starting
+                : t.start_transcription}
             </Button>
             {eta ? (
               <span style={{ fontSize: 11.5, color: "var(--color-fg-3)" }}>
-                estimated {eta} on home GPU
+                {t.estimated_prefix}
+                {eta}
+                {t.estimated_suffix}
               </span>
             ) : null}
           </div>

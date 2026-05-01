@@ -4,6 +4,7 @@ import { Upload } from "lucide-react";
 import { useEditorStore } from "@/lib/editor/store";
 import { Segmented } from "@/components/ui/segmented";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 type PlaybackRate = "1" | "1.25" | "1.5" | "2";
 
@@ -37,6 +38,7 @@ export function AudioPlayer({
   onRebindFile,
   className,
 }: AudioPlayerProps) {
+  const { t } = useI18n();
   const file = useEditorStore((s) => s.fileRefByJobId[jobId]);
   const [src, setSrc] = React.useState<string | null>(null);
   const [rate, setRate] = React.useState<PlaybackRate>(() => {
@@ -102,9 +104,7 @@ export function AudioPlayer({
           gap: 12,
         }}
       >
-        <span style={{ flex: 1 }}>
-          Audio source lost on reload — re-upload to enable scrubbing.
-        </span>
+        <span style={{ flex: 1 }}>{t.editor_audio_lost}</span>
         <input
           ref={reuploadRef}
           type="file"
@@ -119,9 +119,9 @@ export function AudioPlayer({
           variant="ghost"
           size="sm"
           onClick={() => reuploadRef.current?.click()}
-          aria-label="Upload again"
+          aria-label={t.editor_audio_upload_again}
         >
-          <Upload size={12} aria-hidden /> Upload again
+          <Upload size={12} aria-hidden /> {t.editor_audio_upload_again}
         </Button>
       </div>
     );
@@ -152,7 +152,7 @@ export function AudioPlayer({
         ]}
         value={rate}
         onValueChange={onRateChange}
-        aria-label="Playback rate"
+        aria-label={t.editor_playback_rate_aria}
         size="sm"
       />
     </div>

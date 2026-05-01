@@ -32,7 +32,17 @@ export type EditorAction =
       bulk?: boolean;
     }
   | { type: "edit_text"; segmentId: string; text: string }
-  | { type: "split"; segmentId: string }
+  | {
+      type: "split";
+      segmentId: string;
+      /** Optional offset into seg.text where the user's caret was when
+       *  Split was clicked. When provided AND inside the text bounds, the
+       *  reducer splits at that exact character (with leading/trailing
+       *  whitespace trimmed for word boundaries) and computes the time
+       *  proportionally. Item line 37 of Things-to-change.txt — the old
+       *  fixed time-mid-point ignored where the user actually clicked. */
+      caretIndex?: number;
+    }
   | { type: "merge_with_prev"; segmentId: string }
   | { type: "delete"; segmentId: string }
   | { type: "add_speaker"; speaker?: Speaker }
@@ -72,7 +82,9 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     case "reassign_segment": {
       // EDIT-02 (per-segment) / EDIT-03 (bulk merge per UI-SPEC §10.8).
       if (a.bulk) {
-        const fromId = s.segments.find((seg) => seg.id === a.segmentId)?.speaker;
+        const fromId = s.segments.find(
+          (seg) => seg.id === a.segmentId,
+        )?.speaker;
         if (!fromId || fromId === a.toSpeakerId) return s;
         return {
           ...s,
@@ -101,25 +113,64 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     }
 
     case "split": {
-      // editor.jsx lines 121-135: mid-point in time + word-half split.
+      // editor.jsx lines 121-135 used a hard time-mid-point + half-text
+      // split. Quick task 260501-1e4 Task 7 (item line 37 of
+      // Things-to-change.txt) extends this with an optional caretIndex so
+      // the user's actual click point inside the contentEditable becomes
+      // the split point, with the time computed proportionally.
       const idx = s.segments.findIndex((seg) => seg.id === a.segmentId);
       if (idx < 0) return s;
       const seg = s.segments[idx]!;
-      const mid = (seg.start + seg.end) / 2;
-      // Word-half split: words whose start < mid go left, others right.
+
+      // Decide split point in TEXT space first. caretIndex outside the
+      // open interval (0, len) falls back to the legacy mid-point so the
+      // existing tests stay green.
+      const useCaret =
+        a.caretIndex !== undefined &&
+        a.caretIndex > 0 &&
+        a.caretIndex < seg.text.length;
+      const splitChar = useCaret
+        ? (a.caretIndex as number)
+        : Math.floor(seg.text.length / 2);
+
+      // Time space: when caretIndex is given, scale by char ratio so the
+      // resulting `mid` lands roughly where the spoken word boundary is.
+      // If words[] exists, snap to the nearest word's start time so the
+      // playhead aligns with audio boundaries.
+      const proportionalMid = useCaret
+        ? seg.start + (splitChar / seg.text.length) * (seg.end - seg.start)
+        : (seg.start + seg.end) / 2;
+      let mid = proportionalMid;
+      if (useCaret && seg.words && seg.words.length > 0) {
+        let best = seg.words[0]!.s;
+        let bestDelta = Math.abs(best - proportionalMid);
+        for (const w of seg.words) {
+          const d = Math.abs(w.s - proportionalMid);
+          if (d < bestDelta) {
+            bestDelta = d;
+            best = w.s;
+          }
+        }
+        mid = best;
+      }
+
+      // Word-half split using the chosen mid time.
       const left: Word[] | undefined = seg.words?.filter((w) => w.s < mid);
       const right: Word[] | undefined = seg.words?.filter((w) => w.s >= mid);
-      // Text split: split on whitespace at the closest word boundary.
-      // Spec uses a simple half-text approach when words[] is absent.
-      const halfText = Math.floor(seg.text.length / 2);
-      const leftText = seg.text.slice(0, halfText);
-      const rightText = seg.text.slice(halfText);
+
+      // Trim trailing whitespace from leftText and leading whitespace from
+      // rightText so a click before "mas" produces left="..." right="mas..."
+      // rather than left="..." right=" mas..." — fixes item line 37 (the
+      // "off-by-one" the user reported).
+      const leftText = seg.text.slice(0, splitChar).replace(/\s+$/, "");
+      const rightText = seg.text.slice(splitChar).replace(/^\s+/, "");
+
       const segA: Segment = {
         id: `${seg.id}_a`,
         start: seg.start,
         end: mid,
         speaker: seg.speaker,
-        text: leftText.trim() || seg.text,
+        text: leftText || seg.text,
         words: left,
       };
       const segB: Segment = {
@@ -127,7 +178,7 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
         start: mid,
         end: seg.end,
         speaker: seg.speaker,
-        text: rightText.trim() || seg.text,
+        text: rightText || seg.text,
         words: right,
       };
       return {
@@ -154,7 +205,9 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
         speaker: prev.speaker,
         text: `${prev.text} ${cur.text}`.trim(),
         words:
-          prev.words && cur.words ? [...prev.words, ...cur.words] : prev.words ?? cur.words,
+          prev.words && cur.words
+            ? [...prev.words, ...cur.words]
+            : (prev.words ?? cur.words),
       };
       return {
         ...s,

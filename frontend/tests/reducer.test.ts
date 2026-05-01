@@ -25,7 +25,11 @@ describe("editorReducer", () => {
 
   it("rename_speaker with empty label is a no-op", () => {
     const s = freshState();
-    const next = editorReducer(s, { type: "rename_speaker", speakerId: "S0", label: "  " });
+    const next = editorReducer(s, {
+      type: "rename_speaker",
+      speakerId: "S0",
+      label: "  ",
+    });
     expect(next).toBe(s); // strict equality — same object reference
   });
 
@@ -68,7 +72,9 @@ describe("editorReducer", () => {
       segmentId: segId,
       text: "Brand new text.",
     });
-    expect(next.segments.find((seg) => seg.id === segId)?.text).toBe("Brand new text.");
+    expect(next.segments.find((seg) => seg.id === segId)?.text).toBe(
+      "Brand new text.",
+    );
     expect(next.segments[0]!.text).toBe(s.segments[0]!.text);
   });
 
@@ -88,11 +94,70 @@ describe("editorReducer", () => {
     expect(splitB.speaker).toBe(seg.speaker);
   });
 
+  it("split with caretIndex uses the caret position instead of the time mid-point", () => {
+    // Construct a controlled segment whose text is exactly 9 chars so we
+    // can predict the proportional time. Synthetic state — does NOT touch
+    // SAMPLE_PAYLOAD's first segment.
+    const s: EditorState = {
+      ...freshState(),
+      segments: [
+        {
+          id: "syn",
+          start: 0,
+          end: 9,
+          speaker: "S0",
+          text: "abc def gh", // 10 chars; trim of trailing space inside
+        },
+      ],
+    };
+    // caretIndex=4 = right before 'd'. Proportional time = 4/10 * 9 = 3.6.
+    const next = editorReducer(s, {
+      type: "split",
+      segmentId: "syn",
+      caretIndex: 4,
+    });
+    const a = next.segments[0]!;
+    const b = next.segments[1]!;
+    expect(a.text).toBe("abc"); // trailing whitespace trimmed
+    expect(b.text).toBe("def gh"); // leading whitespace trimmed
+    expect(a.start).toBe(0);
+    expect(a.end).toBeCloseTo(3.6, 5);
+    expect(b.start).toBeCloseTo(3.6, 5);
+    expect(b.end).toBe(9);
+  });
+
+  it("split with caretIndex=undefined falls back to mid-point (existing behavior)", () => {
+    const s = freshState();
+    const seg = s.segments[0]!;
+    const next = editorReducer(s, {
+      type: "split",
+      segmentId: seg.id,
+      caretIndex: undefined,
+    });
+    const a = next.segments.find((x) => x.id === `${seg.id}_a`)!;
+    expect(a.end).toBe((seg.start + seg.end) / 2);
+  });
+
+  it("split with caretIndex=0 (or len) falls back to mid-point — preserves current contract", () => {
+    const s = freshState();
+    const seg = s.segments[0]!;
+    const next = editorReducer(s, {
+      type: "split",
+      segmentId: seg.id,
+      caretIndex: 0,
+    });
+    const a = next.segments.find((x) => x.id === `${seg.id}_a`)!;
+    expect(a.end).toBe((seg.start + seg.end) / 2);
+  });
+
   it("merge_with_prev folds current into previous keeping earliest start + latest end", () => {
     const s = freshState();
     const segA = s.segments[0]!;
     const segB = s.segments[1]!;
-    const next = editorReducer(s, { type: "merge_with_prev", segmentId: segB.id });
+    const next = editorReducer(s, {
+      type: "merge_with_prev",
+      segmentId: segB.id,
+    });
     expect(next.segments.length).toBe(s.segments.length - 1);
     const merged = next.segments[0]!;
     expect(merged.start).toBe(segA.start);
@@ -103,7 +168,10 @@ describe("editorReducer", () => {
 
   it("merge_with_prev on segs[0] is a no-op", () => {
     const s = freshState();
-    const next = editorReducer(s, { type: "merge_with_prev", segmentId: s.segments[0]!.id });
+    const next = editorReducer(s, {
+      type: "merge_with_prev",
+      segmentId: s.segments[0]!.id,
+    });
     expect(next).toBe(s);
   });
 
