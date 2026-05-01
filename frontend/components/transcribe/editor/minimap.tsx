@@ -52,21 +52,23 @@ export function Minimap({
   }, [speakers]);
 
   // Internal scale state used when the parent doesn't lift it. Persisted to
-  // localStorage so the user's preference survives reloads. Default = 1×
-  // matches the original visual size (item line 43 of Things-to-change.txt
-  // — "leave the default at this current size").
-  const [internalScale, setInternalScale] = React.useState<MinimapScale>(1);
-  React.useEffect(() => {
-    if (scaleProp !== undefined) return;
+  // localStorage so the user's preference survives reloads. Default = 2×
+  // (item 9 of "things to change 2.txt") — at 1× the bars are too thin to
+  // host a readable text preview, and the user wants the preview on by
+  // default. localStorage still wins when present so users who set 1×
+  // explicitly aren't overridden. Lazy initializer avoids the
+  // setState-in-effect cascade lint rule.
+  const [internalScale, setInternalScale] = React.useState<MinimapScale>(() => {
     try {
       const stored = window.localStorage.getItem(SCALE_STORAGE_KEY);
       if (stored === "1" || stored === "2" || stored === "3") {
-        setInternalScale(Number(stored) as MinimapScale);
+        return Number(stored) as MinimapScale;
       }
     } catch {
-      /* private mode — fall through */
+      /* SSR or private mode — fall through */
     }
-  }, [scaleProp]);
+    return 2;
+  });
   const scale = scaleProp ?? internalScale;
   const setScale = React.useCallback(
     (s: MinimapScale) => {
@@ -154,6 +156,13 @@ export function Minimap({
           const idx = speakerIndex.get(seg.speaker) ?? 0;
           const color = `var(--color-sp-${(idx % 5) + 1})`;
           const isActive = seg.id === activeSegId;
+          // Item 9 of "things to change 2.txt": each bar shows a snippet
+          // of its segment text so the overview doubles as a content
+          // index. We only render the preview when the bar is tall enough
+          // to fit a readable line — anything shorter than ~22px gets the
+          // accessible-only label and an empty bar to preserve density.
+          const showPreview = height >= 22;
+          const lines = Math.max(1, Math.floor((height - 6) / 13));
 
           return (
             <button
@@ -173,6 +182,17 @@ export function Minimap({
                 cursor: "pointer",
                 opacity: isActive ? 1 : 0.85,
                 transition: "opacity 150ms, border-color 150ms",
+                padding: showPreview ? "2px 6px" : 0,
+                textAlign: "left",
+                color: "var(--color-bg-0)",
+                fontSize: 11,
+                lineHeight: "13px",
+                fontWeight: 500,
+                overflow: "hidden",
+                display: showPreview ? "-webkit-box" : "block",
+                WebkitBoxOrient:
+                  "vertical" as React.CSSProperties["WebkitBoxOrient"],
+                WebkitLineClamp: lines,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.opacity = "1";
@@ -180,7 +200,9 @@ export function Minimap({
               onMouseLeave={(e) => {
                 e.currentTarget.style.opacity = isActive ? "1" : "0.85";
               }}
-            />
+            >
+              {showPreview ? seg.text : null}
+            </button>
           );
         })}
 

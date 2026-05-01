@@ -4,13 +4,44 @@ import { Chip } from "@/components/ui/chip";
 import { useI18n } from "@/lib/i18n/i18n-context";
 
 /**
- * Hero block — verbatim port from spec landing.jsx lines 51-97.
- * Copy migrated to i18n catalog (quick task 260501-1e4 Task 3); the English
- * strings remain byte-identical to the original spec wording so existing
- * landing.test.tsx assertions still pass under the default `en` locale.
- * Status pill version numbers updated to Phase 02 actuals
- * (pyannote 3.4 / whisper.cpp v1.8) per CONTEXT <specifics>.
+ * Hero block. The two-line copy is locale-driven: each catalog supplies
+ * `hero_line_1` (plain text) and `hero_line_2` (text with optional markup —
+ * see lib/i18n/types.ts for the supported tag list).
+ *
+ * The original implementation hard-coded the English word order
+ * ("Editable, speaker-labeled transcript out.") and concatenated four
+ * separate i18n keys, which forced translators into the same syntactic
+ * shape and produced unnatural Portuguese ("Editável, com falantes
+ * identificados transcrição sai." — clipped, ambiguous). Pulling the
+ * composition into the catalog lets each locale keep its own order.
  */
+const TAG_RE = /(<accent>[\s\S]*?<\/accent>|<em>[\s\S]*?<\/em>)/g;
+
+function renderLine(line: string): React.ReactNode {
+  return line.split(TAG_RE).map((part, i) => {
+    if (part.startsWith("<accent>")) {
+      const inner = part.slice("<accent>".length, -"</accent>".length);
+      return (
+        <em
+          key={i}
+          style={{ fontStyle: "italic", color: "var(--color-accent)" }}
+        >
+          {inner}
+        </em>
+      );
+    }
+    if (part.startsWith("<em>")) {
+      const inner = part.slice("<em>".length, -"</em>".length);
+      return (
+        <em key={i} style={{ fontStyle: "italic" }}>
+          {inner}
+        </em>
+      );
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+}
+
 export function LandingHero() {
   const { t } = useI18n();
   return (
@@ -18,12 +49,10 @@ export function LandingHero() {
       className="flex flex-col items-center text-center"
       style={{ marginBottom: 36 }}
     >
-      {/* Status pill — UI-SPEC §13.1; live-dot uses --color-ok per UI-SPEC §4 */}
       <Chip dotColor="var(--color-ok)" className="mb-6">
         {t.hero_status_pill}
       </Chip>
 
-      {/* Hero (Fraunces 38-64 px clamp) — italic accent words per UI-SPEC §3 */}
       <h1
         className="font-serif"
         style={{
@@ -35,28 +64,11 @@ export function LandingHero() {
           margin: 0,
         }}
       >
-        {t.hero_long_audio_in}
+        {renderLine(t.hero_line_1)}
         <br />
-        <em
-          style={{
-            fontStyle: "italic",
-            color: "var(--color-accent)",
-          }}
-        >
-          {t.hero_editable}
-        </em>
-        ,{" "}
-        <em
-          style={{
-            fontStyle: "italic",
-          }}
-        >
-          {t.hero_speaker_labeled}
-        </em>{" "}
-        {t.hero_transcript_out}
+        {renderLine(t.hero_line_2)}
       </h1>
 
-      {/* Sub-copy — UI-SPEC §13.1 (Inter 15px) */}
       <p
         style={{
           fontSize: 15,

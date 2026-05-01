@@ -132,6 +132,10 @@ export function OptionsPanel({
 }: OptionsPanelProps) {
   const { locale, t } = useI18n();
   const presetUi = PRESET_TO_UI[options.preset];
+  // When the user picks an explicit model in the Advanced panel, the
+  // preset is ignored backend-side, so we dim + disable the Quality row
+  // (item 2 of "things to change 2.txt").
+  const manualModel = !!options.model;
   const [open, setOpen] = React.useState(defaultOpen);
   // Advanced sub-accordion (item line 15 of Things-to-change.txt).
   // Collapsed by default — most users will not override the preset.
@@ -195,10 +199,20 @@ export function OptionsPanel({
               render a small info icon next to the segmented control with a
               tooltip explaining why — item line 13 of Things-to-change.txt.
               The icon is a real button so it captures keyboard focus + the
-              Tooltip primitive's aria-describedby wiring works for AT users. */}
-          <OptionRow label={t.options_quality} hint={t.options_quality_hint}>
+              Tooltip primitive's aria-describedby wiring works for AT users.
+              Item 2 of "things to change 2.txt": the preset row is dimmed
+              + disabled when the user picks an explicit model below, since
+              the preset is ignored in that case. */}
+          <OptionRow
+            label={t.options_quality}
+            hint={t.options_quality_hint}
+            disabled={manualModel}
+          >
             <Segmented<PresetUiValue>
-              options={presetItems}
+              options={presetItems.map((p) => ({
+                ...p,
+                disabled: p.disabled || manualModel,
+              }))}
               value={presetUi}
               onValueChange={(v) =>
                 onChange({ ...options, preset: UI_TO_PRESET[v] })
@@ -355,7 +369,12 @@ export function OptionsPanel({
                 label={t.options_model_picker_label}
                 hint={t.options_model_picker_hint}
               >
+                {/* fullWidth keeps the long "— use preset —" / model labels
+                    from forcing the Select wider than the OptionRow's right
+                    column. The native <select> popup still shows the full
+                    text on click — only the closed control is clipped. */}
                 <Select
+                  fullWidth
                   value={options.model ?? ""}
                   onChange={(e) =>
                     onChange({
@@ -366,22 +385,17 @@ export function OptionsPanel({
                   aria-label="Model override"
                 >
                   <option value="">— use preset —</option>
-                  <option value="tiny">
-                    Tiny — 1 GB VRAM, ~30× realtime, drafty
-                  </option>
-                  <option value="base">Base — 1 GB VRAM, ~25× realtime</option>
+                  <option value="tiny">Tiny · 1 GB · ~30× realtime</option>
+                  <option value="base">Base · 1 GB · ~25× realtime</option>
                   <option value="small">
-                    Small — 2 GB VRAM, ~20× realtime (Fast preset)
+                    Small · 2 GB · ~20× realtime (Fast)
                   </option>
-                  <option value="medium">
-                    Medium — 5 GB VRAM, ~10× realtime
-                  </option>
+                  <option value="medium">Medium · 5 GB · ~10× realtime</option>
                   <option value="large-v3-turbo">
-                    Large-v3-turbo — ~6 GB VRAM, ~30–60× batched (Balanced
-                    preset)
+                    Large-v3-turbo · 6 GB · ~30–60× (Balanced)
                   </option>
                   <option value="large-v3" disabled>
-                    Large-v3 — ~10 GB VRAM (disabled on this 8 GB host)
+                    Large-v3 · 10 GB (disabled — 8 GB host)
                   </option>
                 </Select>
               </OptionRow>

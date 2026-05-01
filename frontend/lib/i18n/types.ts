@@ -14,10 +14,18 @@ export type Locale = "en" | "pt-BR";
 export interface Messages {
   // ── Hero (landing) ─────────────────────────────────────────────────────
   hero_status_pill: string; // "Home GPU online · pyannote 3.4 · whisper.cpp v1.8"
-  hero_long_audio_in: string;
-  hero_editable: string;
-  hero_speaker_labeled: string;
-  hero_transcript_out: string;
+  /** First line. Plain text — no markup. */
+  hero_line_1: string;
+  /**
+   * Second line. Each locale composes its own word order. Markup the line
+   * using the lightweight tags below; LandingHero turns them into JSX:
+   *   <accent>...</accent>  → italic in the warm-amber accent color
+   *   <em>...</em>          → italic in the default text color
+   * Anything outside tags renders as plain text. Translators can rearrange
+   * the line however reads naturally — the original Portuguese order
+   * "Editable, speaker-labeled transcript out." was awkwardly literal.
+   */
+  hero_line_2: string;
   hero_sub: string;
 
   // ── Upload zone ─────────────────────────────────────────────────────────
@@ -146,7 +154,17 @@ export interface Messages {
   editor_toast_segment_reassigned: string;
   editor_toast_merged_with_previous: string;
   editor_toast_segment_deleted: string;
+  editor_toast_segment_deleted_undo: string;
   editor_toast_speaker_added_reassigned: string;
+  editor_rename_speaker_label: string; // "Rename {label}"
+  editor_rename_speaker_aria: string; // input aria-label
+  editor_rename_save: string; // submit button
+  editor_undo: string;
+  editor_revert_original: string;
+  editor_revert_confirm: string; // body of the confirmation modal
+  editor_revert_confirm_action: string; // primary action label
+  editor_revert_cancel: string; // cancel action label
+  editor_loading_transcript: string;
 
   // ── Footer (editor) ────────────────────────────────────────────────────
   editor_word_count_words: string; // " words"

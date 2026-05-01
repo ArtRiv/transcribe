@@ -16,7 +16,7 @@
   --color-bg-0: oklch(0.18 0.008 70);
   --color-bg-1: oklch(0.205 0.008 70);
   --color-bg-2: oklch(0.235 0.009 70);
-  --color-bg-3: oklch(0.275 0.010 70);
+  --color-bg-3: oklch(0.275 0.01 70);
   --color-bg-4: oklch(0.32 0.011 70);
 
   /* Foreground scale (paper-cream, hue 80) — Transcribe.html lines 23-27 */
@@ -27,8 +27,8 @@
   --color-fg-4: oklch(0.42 0.011 80);
 
   /* Lines — Transcribe.html lines 20-21 */
-  --color-line: oklch(0.32 0.010 70 / 0.7);
-  --color-line-soft: oklch(0.30 0.010 70 / 0.5);
+  --color-line: oklch(0.32 0.01 70 / 0.7);
+  --color-line-soft: oklch(0.3 0.01 70 / 0.5);
 
   /* Accent (warm amber, hue 70) — Transcribe.html lines 29-32 */
   --color-accent: oklch(0.78 0.12 70);
@@ -42,11 +42,11 @@
   --color-err: oklch(0.72 0.15 25);
 
   /* Speaker palette (D-05) — Transcribe.html lines 38-43 */
-  --color-sp-1: oklch(0.78 0.10 70);
+  --color-sp-1: oklch(0.78 0.1 70);
   --color-sp-2: oklch(0.74 0.09 200);
-  --color-sp-3: oklch(0.76 0.10 330);
+  --color-sp-3: oklch(0.76 0.1 330);
   --color-sp-4: oklch(0.78 0.09 145);
-  --color-sp-5: oklch(0.76 0.10 280);
+  --color-sp-5: oklch(0.76 0.1 280);
 
   /* Radii (D-06) — Transcribe.html lines 45-48 */
   --radius-sm: 6px;
@@ -63,8 +63,14 @@
 }
 
 /* Base reset — Transcribe.html lines 55-56 */
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
 
 /* Body + paper-grain (D-04) — Transcribe.html lines 57-64 */
 body {
@@ -95,16 +101,21 @@ body::before {
 }
 
 /* Generic scrollbar — Transcribe.html lines 88-96 */
-*::-webkit-scrollbar { width: 10px; height: 10px; }
-*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
 *::-webkit-scrollbar-thumb {
-  background: oklch(0.40 0.010 70 / 0.6);
+  background: oklch(0.4 0.01 70 / 0.6);
   border-radius: 6px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.50 0.010 70 / 0.8);
+  background: oklch(0.5 0.01 70 / 0.8);
   background-clip: content-box;
   border: 2px solid transparent;
 }
@@ -117,12 +128,17 @@ body::before {
 }
 
 /* Mono / Serif utility classes the design uses — Transcribe.html lines 106-112 */
-.mono { font-family: var(--font-mono); font-feature-settings: "ss01"; }
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "ss01";
+}
 .serif {
   font-family: var(--font-serif);
   font-weight: 400;
   font-optical-sizing: auto;
-  font-variation-settings: "opsz" 96, "SOFT" 50;
+  font-variation-settings:
+    "opsz" 96,
+    "SOFT" 50;
 }
 
 /* contentEditable focus state — Transcribe.html lines 400-407.
@@ -142,42 +158,75 @@ body::before {
 
 /* pulse — Transcribe.html lines 257-260 (live-dot on app bar status pill) */
 @keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 4px oklch(0.78 0.11 145 / 0.0); }
-  50%      { box-shadow: 0 0 0 4px oklch(0.78 0.11 145 / 0.22); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px oklch(0.78 0.11 145 / 0);
+  }
+  50% {
+    box-shadow: 0 0 0 4px oklch(0.78 0.11 145 / 0.22);
+  }
 }
 
 /* ringPulse — processing.jsx lines 240-243 (active-phase ring) */
 @keyframes ringPulse {
-  0%, 100% { box-shadow: 0 0 0 0 oklch(0.78 0.12 70 / 0); }
-  50%      { box-shadow: 0 0 0 6px oklch(0.78 0.12 70 / 0.18); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.78 0.12 70 / 0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px oklch(0.78 0.12 70 / 0.18);
+  }
 }
 
 /* barShimmer — processing.jsx lines 247-250 (chunked-bar head + active-phase progress bar) */
 @keyframes barShimmer {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(200%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
 }
 
 /* drawCheck — processing.jsx lines 244-246 (DoneCheck SVG path stroke) */
 @keyframes drawCheck {
-  to { stroke-dashoffset: 0; }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* fade — Transcribe.html lines 394-397 (every screen mount, every menu) */
 @keyframes fade {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* toast — Transcribe.html lines 387-390 */
+/* toast — the parent container is already translate-x: -50% centered, so the
+   keyframe only animates Y. Animating translate(-50%, …) on the child layered
+   a second X shift while running and snapped back when it ended, producing
+   the brief sideways jump users saw on every toast. */
 @keyframes toast {
-  from { opacity: 0; transform: translate(-50%, 12px); }
-  to   { opacity: 1; transform: translate(-50%, 0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Reduced motion — UI-SPEC §12.5 */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;

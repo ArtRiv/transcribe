@@ -13,12 +13,14 @@
 import type { Messages } from "./types";
 
 export const PT_BR_MESSAGES: Messages = {
-  // Hero
+  // Hero — see types.ts comment for the supported markup tags. The line
+  // composition is locale-driven: rearrange the words however reads naturally
+  // for your language. <accent>…</accent> is the warm-amber italic; <em>…</em>
+  // is plain italic. Anything outside tags renders as regular text.
   hero_status_pill: "GPU local online · pyannote 3.4 · whisper.cpp v1.8",
-  hero_long_audio_in: "Áudio longo entra.",
-  hero_editable: "Editável",
-  hero_speaker_labeled: "com falantes identificados",
-  hero_transcript_out: "transcrição sai.",
+  hero_line_1: "Áudio longo entra.",
+  hero_line_2:
+    "Transcrição <accent>editável</accent> <em>com falantes identificados</em> sai.",
   hero_sub:
     "Solte uma gravação de reunião, uma entrevista, um podcast — até cinco horas. O Whisper escreve as palavras, o pyannote separa os falantes, você faz a edição.",
 
@@ -159,8 +161,19 @@ export const PT_BR_MESSAGES: Messages = {
   editor_toast_segment_reassigned: "Segmento reatribuído",
   editor_toast_merged_with_previous: "Mesclado com anterior",
   editor_toast_segment_deleted: "Segmento apagado",
+  editor_toast_segment_deleted_undo: "Segmento apagado — desfazer?",
   editor_toast_speaker_added_reassigned:
     "Novo falante adicionado e reatribuído",
+  editor_rename_speaker_label: "Renomear {label}",
+  editor_rename_speaker_aria: "Novo nome do falante",
+  editor_rename_save: "Salvar",
+  editor_undo: "Desfazer",
+  editor_revert_original: "Voltar ao original",
+  editor_revert_confirm:
+    "Descartar todas as edições e recarregar a transcrição original?",
+  editor_revert_confirm_action: "Voltar",
+  editor_revert_cancel: "Cancelar",
+  editor_loading_transcript: "Carregando transcrição…",
 
   // Editor footer
   editor_word_count_words: " palavras",

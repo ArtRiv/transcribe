@@ -132,6 +132,11 @@ export function AudioPlayer({
       className={className}
       style={{ display: "flex", alignItems: "center", gap: 12 }}
     >
+      {/* accent-color drives the played-section fill on the native audio
+          element's shadow-DOM slider in Chromium-based browsers (Chrome 105+,
+          Edge, Opera). Firefox doesn't honour it on <audio> as of 2026 — the
+          played fill stays the platform default there, which we accept rather
+          than re-implement the whole control surface. */}
       <audio
         ref={audioRef}
         src={src ?? undefined}
@@ -140,7 +145,12 @@ export function AudioPlayer({
         onPlay={() => onPlayingChange?.(true)}
         onPause={() => onPlayingChange?.(false)}
         onTimeUpdate={(e) => onTimeUpdate?.(e.currentTarget.currentTime)}
-        style={{ flex: 1, height: 32 }}
+        style={{
+          flex: 1,
+          height: 32,
+          accentColor: "var(--color-accent)",
+          colorScheme: "dark",
+        }}
       />
       {/* VIEW-04: 4 playback rates with localStorage persistence */}
       <Segmented<PlaybackRate>

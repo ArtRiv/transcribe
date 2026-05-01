@@ -2,6 +2,7 @@
 import * as React from "react";
 import { editorReducer, type EditorState } from "@/lib/editor/reducer";
 import { SAMPLE_PAYLOAD } from "@/lib/mock/data";
+import { useI18n } from "@/lib/i18n/i18n-context";
 import {
   useAutosave,
   readSavedEdits,
@@ -27,6 +28,8 @@ import { env } from "@/lib/env";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { promoteAnonJob } from "@/lib/auth/promote";
 import * as Tooltip from "@/components/ui/tooltip";
+import * as Dialog from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface EditorClientProps {
   jobId: string;
@@ -37,14 +40,26 @@ interface EditorClientProps {
 type Density = "compact" | "normal" | "comfortable";
 
 /**
- * Resolve initial transcript payload.
- * Phase 3 mock: SAMPLE_PAYLOAD synchronously (Plan 03-01 fixture).
- * Phase 4 will fetch via TanStack Query against /jobs/{id}/transcript.
+ * Empty placeholder used while the real transcript loads from Supabase.
+ * The mock path keeps SAMPLE_PAYLOAD as its initial seed (so the
+ * Storybook-style demo job continues to render without a backend) — the
+ * production path stays empty + skeleton-gated until the initial fetch
+ * resolves. Item 10 of "things to change 2.txt": users were seeing the
+ * Maya demo flash on every reload of a real job because the initial
+ * dispatch happened a tick after first paint.
  */
+const EMPTY_PAYLOAD: EditorState = {
+  version: 1,
+  language: "",
+  duration_sec: 0,
+  speakers: [],
+  segments: [],
+};
+
 function resolveInitial(jobId: string): EditorState {
-  // In a real app this would be a useQuery; Phase 3 stays sync for simplicity.
   void jobId;
-  return SAMPLE_PAYLOAD;
+  if (env.NEXT_PUBLIC_USE_MOCKS === "1") return SAMPLE_PAYLOAD;
+  return EMPTY_PAYLOAD;
 }
 
 /**
@@ -62,10 +77,87 @@ function resolveInitial(jobId: string): EditorState {
  * [Cited: RESEARCH §Pattern 2; 03-PATTERNS.md §editor-client.tsx]
  */
 export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
+  const { t } = useI18n();
   const [state, dispatch] = React.useReducer(
     editorReducer,
     jobId,
     resolveInitial,
+  );
+  // Item 6 of "things to change 2.txt": back up every mutation so the user
+  // can undo accidental deletes / splits / renames, and stash the first
+  // hydrated payload so "Revert to original" can roll the whole transcript
+  // back. We use refs (not state) for the history stack to avoid re-renders
+  // on every dispatch; only the head's existence drives the toolbar's
+  // disabled state, which we track in a small piece of state below.
+  const historyRef = React.useRef<EditorState[]>([]);
+  const originalRef = React.useRef<EditorState | null>(null);
+  const [canUndo, setCanUndo] = React.useState(false);
+
+  const wrappedDispatch = React.useCallback(
+    (action: import("@/lib/editor/reducer").EditorAction) => {
+      // 'restore' actions come from server hydration / the restore pill /
+      // undo itself — we don't want them clogging the history stack.
+      if (action.type !== "restore") {
+        // Cap at 50 entries; older snapshots fall off the front.
+        const stack = historyRef.current;
+        stack.push(state);
+        if (stack.length > 50) stack.shift();
+        setCanUndo(true);
+      }
+      dispatch(action);
+    },
+    [state],
+  );
+
+  const undo = React.useCallback(() => {
+    const prev = historyRef.current.pop();
+    if (!prev) return;
+    dispatch({ type: "restore", state: prev });
+    setCanUndo(historyRef.current.length > 0);
+  }, []);
+
+  // Stamp the original payload once, the first time the server delivers
+  // real data. Mock mode never enters this path (the seed IS the payload),
+  // so we cover that case in a separate effect below.
+  const stampOriginal = React.useCallback((payload: EditorState) => {
+    if (originalRef.current === null) originalRef.current = payload;
+  }, []);
+
+  React.useEffect(() => {
+    if (env.NEXT_PUBLIC_USE_MOCKS === "1" && originalRef.current === null) {
+      // The reducer was seeded with SAMPLE_PAYLOAD in mock mode — stash it
+      // as the original so revert still works in the demo build.
+      originalRef.current = state;
+    }
+    // We deliberately want this to run only once on mount; the dependency
+    // array stays empty so a later state change doesn't overwrite the
+    // captured original.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Revert opens a confirmation modal — Dialog.Root is rendered below, and
+  // its open state is owned by editor-client. We snapshot the current
+  // state into the undo stack on confirm so the user can still walk the
+  // revert back if they regret it.
+  const [revertOpen, setRevertOpen] = React.useState(false);
+  const revertToOriginal = React.useCallback(() => {
+    if (!originalRef.current) return;
+    setRevertOpen(true);
+  }, []);
+  const confirmRevert = React.useCallback(() => {
+    const orig = originalRef.current;
+    if (!orig) return;
+    historyRef.current.push(state);
+    setCanUndo(true);
+    dispatch({ type: "restore", state: orig });
+    setRevertOpen(false);
+  }, [state]);
+  // Hydration gate — true until the first read of jobs.transcript_payload
+  // (or a Realtime UPDATE) completes. The skeleton renders during this
+  // window so the user never sees the empty placeholder, and the mock
+  // path is hydrated from the start since SAMPLE_PAYLOAD is its seed.
+  const [hydrated, setHydrated] = React.useState(
+    () => env.NEXT_PUBLIC_USE_MOCKS === "1",
   );
   const saveStatus = useAutosave(jobId, state);
   const setFileRef = useEditorStore((s) => s.setFile);
@@ -143,7 +235,20 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
   const [minimapOpen, setMinimapOpen] = React.useState(true);
   // Lifted minimap scale so the sibling Timeline (single-speaker mode) can
   // use the same density. Persisted by Minimap on every change.
-  const [minimapScale, setMinimapScale] = React.useState<MinimapScale>(1);
+  // Default 2× — see Minimap for the rationale (preview text needs height).
+  // Read the persisted scale up here so a user preference still wins. The
+  // Minimap below skips its own localStorage read when scale is lifted.
+  const [minimapScale, setMinimapScale] = React.useState<MinimapScale>(() => {
+    try {
+      const stored = window.localStorage.getItem("transcribe.minimapScale");
+      if (stored === "1" || stored === "2" || stored === "3") {
+        return Number(stored) as MinimapScale;
+      }
+    } catch {
+      /* SSR or private mode — fall through */
+    }
+    return 2;
+  });
   const [exportOpen, setExportOpen] = React.useState(false);
 
   // Audio state. After Task 6 the toolbar no longer renders a Play/Pause
@@ -180,6 +285,23 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
         searchInputRef.current?.select();
         return;
       }
+      // Cmd/Ctrl + Z → undo last transcript edit. EditableText stops
+      // propagation when its contentEditable is focused, so native browser
+      // undo still works for in-flight typing — only edits already
+      // committed via the reducer get rolled back here.
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "z"
+      ) {
+        const ae = document.activeElement as HTMLElement | null;
+        const editable = ae?.isContentEditable ?? false;
+        const tag = ae?.tagName ?? "";
+        if (editable || tag === "INPUT" || tag === "TEXTAREA") return;
+        e.preventDefault();
+        undo();
+        return;
+      }
       // Escape → blur active element (Tooltip + Popover handle their own dismissal)
       if (e.key === "Escape") {
         const ae = document.activeElement;
@@ -201,7 +323,7 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [undo]);
 
   // Realtime subscription — listens for job status changes.
   // When status='succeeded' arrives with transcript_payload, dispatch 'restore'
@@ -217,11 +339,10 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
         const handler = (payload: { new: JobRow }) => {
           const row = payload.new;
           if (row.status === "succeeded" && row.transcript_payload) {
+            const next = row.transcript_payload as EditorState;
+            stampOriginal(next);
             // T-03-51: Phase 3 trusts SAMPLE_PAYLOAD shape; Phase 4 adds zod validation.
-            dispatch({
-              type: "restore",
-              state: row.transcript_payload as EditorState,
-            });
+            dispatch({ type: "restore", state: next });
           }
         };
         const sub = client
@@ -246,13 +367,13 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
     // Real path — subscribeToJob handles Supabase channel lifecycle.
     return subscribeToJob(jobId, (row) => {
       if (row.status === "succeeded" && row.transcript_payload) {
-        dispatch({
-          type: "restore",
-          state: row.transcript_payload as EditorState,
-        });
+        const next = row.transcript_payload as EditorState;
+        stampOriginal(next);
+        dispatch({ type: "restore", state: next });
+        setHydrated(true);
       }
     });
-  }, [jobId]);
+  }, [jobId, stampOriginal]);
 
   // One-shot initial transcript hydration (quick task 260430-lr0).
   // The Realtime subscription above only fires on UPDATE events. When the
@@ -284,16 +405,20 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
         return;
       }
       if (data?.transcript_payload) {
-        dispatch({
-          type: "restore",
-          state: data.transcript_payload as EditorState,
-        });
+        const next = data.transcript_payload as EditorState;
+        stampOriginal(next);
+        dispatch({ type: "restore", state: next });
       }
+      // Whether or not a payload was present, the initial read settled —
+      // flip the skeleton off. If the row is still processing, the
+      // Realtime subscription above will fill in transcript_payload when
+      // status flips to 'succeeded'.
+      setHydrated(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [jobId]);
+  }, [jobId, stampOriginal]);
 
   // VIEW-05: click-to-seek — set audio.currentTime to segment start
   const onSegmentClick = React.useCallback(
@@ -317,6 +442,70 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
     },
     [jobId, setFileRef],
   );
+
+  if (!hydrated) {
+    // Lightweight skeleton while the initial transcript read settles.
+    // Item 10 of "things to change 2.txt" — the prior implementation
+    // seeded state with the Maya demo payload and flashed it on every
+    // reload before the real transcript arrived a tick later.
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        style={{
+          height: "calc(100dvh - 64px)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "flex-start",
+          padding: "60px 24px",
+          gap: 18,
+        }}
+      >
+        <span className="sr-only">{t.editor_loading_transcript}</span>
+        <div
+          style={{
+            width: "min(820px, 100%)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              height: 36,
+              width: "40%",
+              borderRadius: 6,
+              background: "var(--color-bg-2)",
+              animation: "fade 600ms ease infinite alternate",
+            }}
+          />
+          <div
+            style={{
+              height: 32,
+              width: "100%",
+              borderRadius: 6,
+              background: "var(--color-bg-2)",
+              animation: "fade 600ms ease infinite alternate",
+            }}
+          />
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                height: 64,
+                borderRadius: 8,
+                background: "var(--color-bg-2)",
+                opacity: 0.6 + (i % 3) * 0.1,
+                animation: "fade 600ms ease infinite alternate",
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ToastProvider>
@@ -403,6 +592,9 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
               minimapOpen={minimapOpen}
               onToggleMinimap={() => setMinimapOpen((v) => !v)}
               onExport={() => setExportOpen(true)}
+              onUndo={undo}
+              canUndo={canUndo}
+              onRevertToOriginal={revertToOriginal}
             />
           </div>
 
@@ -418,7 +610,7 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
               speakers={state.speakers}
               segments={state.segments}
               activeSpeakerId={activeSeg?.speaker ?? null}
-              dispatch={dispatch}
+              dispatch={wrappedDispatch}
             />
           </div>
 
@@ -480,7 +672,7 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
                 density={density}
                 activeSegId={activeSeg?.id ?? null}
                 searchQuery={searchQuery}
-                dispatch={dispatch}
+                dispatch={wrappedDispatch}
                 onSegmentClick={onSegmentClick}
               />
             </div>
@@ -543,6 +735,67 @@ export function EditorClient({ jobId, isAnonJob = false }: EditorClientProps) {
           state={state}
           defaultTitle="Transcript"
         />
+
+        {/* Revert-to-original confirmation. Replaces the native
+            window.confirm so the prompt sits in the app's design language
+            (focus trap, Escape, animated backdrop) and so the title +
+            body can render proper Portuguese punctuation/diacritics
+            instead of the OS-default browser dialog. */}
+        <Dialog.Root open={revertOpen} onOpenChange={setRevertOpen}>
+          <Dialog.Panel
+            aria-labelledby="revert-title"
+            aria-describedby="revert-body"
+            style={{
+              width: "min(440px, 100%)",
+              padding: 22,
+              display: "flex",
+              flexDirection: "column",
+              gap: 14,
+            }}
+          >
+            <Dialog.Title
+              id="revert-title"
+              style={{
+                fontSize: 16,
+                fontWeight: 600,
+                color: "var(--color-fg-0)",
+                margin: 0,
+              }}
+            >
+              {t.editor_revert_original}
+            </Dialog.Title>
+            <Dialog.Description
+              id="revert-body"
+              style={{
+                fontSize: 13.5,
+                lineHeight: 1.5,
+                color: "var(--color-fg-2)",
+                margin: 0,
+              }}
+            >
+              {t.editor_revert_confirm}
+            </Dialog.Description>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 8,
+                marginTop: 4,
+              }}
+            >
+              <Dialog.Close
+                render={(props) => (
+                  <Button {...props} variant="ghost" size="sm">
+                    {t.editor_revert_cancel}
+                  </Button>
+                )}
+              />
+              <Button variant="primary" size="sm" onClick={confirmRevert}>
+                {t.editor_revert_confirm_action}
+              </Button>
+            </div>
+          </Dialog.Panel>
+        </Dialog.Root>
       </Tooltip.Provider>
     </ToastProvider>
   );

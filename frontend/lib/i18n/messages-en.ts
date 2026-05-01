@@ -10,12 +10,11 @@
 import type { Messages } from "./types";
 
 export const EN_MESSAGES: Messages = {
-  // Hero
+  // Hero — see types.ts comment for the supported markup tags.
   hero_status_pill: "Home GPU online · pyannote 3.4 · whisper.cpp v1.8",
-  hero_long_audio_in: "Long audio in.",
-  hero_editable: "Editable",
-  hero_speaker_labeled: "speaker-labeled",
-  hero_transcript_out: "transcript out.",
+  hero_line_1: "Long audio in.",
+  hero_line_2:
+    "<accent>Editable</accent>, <em>speaker-labeled</em> transcript out.",
   hero_sub:
     "Drop a meeting recording, an interview, a podcast — up to five hours. Whisper does the words, pyannote splits the speakers, you do the editing.",
 
@@ -154,7 +153,18 @@ export const EN_MESSAGES: Messages = {
   editor_toast_segment_reassigned: "Segment reassigned",
   editor_toast_merged_with_previous: "Merged with previous",
   editor_toast_segment_deleted: "Segment deleted",
+  editor_toast_segment_deleted_undo: "Segment deleted — undo?",
   editor_toast_speaker_added_reassigned: "Added new speaker and reassigned",
+  editor_rename_speaker_label: "Rename {label}",
+  editor_rename_speaker_aria: "New speaker name",
+  editor_rename_save: "Save",
+  editor_undo: "Undo",
+  editor_revert_original: "Revert to original",
+  editor_revert_confirm:
+    "Discard every edit and reload the original transcript?",
+  editor_revert_confirm_action: "Revert",
+  editor_revert_cancel: "Cancel",
+  editor_loading_transcript: "Loading transcript…",
 
   // Editor footer
   editor_word_count_words: " words",

@@ -1,6 +1,13 @@
 "use client";
 import * as React from "react";
-import { PanelLeft, PanelRight, Search, Download } from "lucide-react";
+import {
+  PanelLeft,
+  PanelRight,
+  Search,
+  Download,
+  Undo2,
+  RotateCcw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { Kbd } from "@/components/ui/kbd";
@@ -20,6 +27,9 @@ interface EditorToolbarProps {
   minimapOpen: boolean;
   onToggleMinimap: () => void;
   onExport: () => void;
+  onUndo: () => void;
+  canUndo: boolean;
+  onRevertToOriginal: () => void;
 }
 
 /**
@@ -42,6 +52,9 @@ export function EditorToolbar({
   minimapOpen,
   onToggleMinimap,
   onExport,
+  onUndo,
+  canUndo,
+  onRevertToOriginal,
 }: EditorToolbarProps) {
   const { t } = useI18n();
   return (
@@ -126,6 +139,45 @@ export function EditorToolbar({
         aria-label={t.editor_density_aria}
         size="sm"
       />
+
+      {/* Undo (item 6 of "things to change 2.txt"). Disabled when the
+          history stack is empty so the user knows there's nothing to roll
+          back. Cmd/Ctrl+Z fires the same action via editor-client. */}
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onUndo}
+              disabled={!canUndo}
+              aria-label={t.editor_undo}
+            >
+              <Undo2 size={14} aria-hidden />
+            </Button>
+          }
+        />
+        <Tooltip.Panel>
+          {t.editor_undo} <Kbd>⌘Z</Kbd>
+        </Tooltip.Panel>
+      </Tooltip.Root>
+
+      {/* Revert to original — confirms before discarding every edit. */}
+      <Tooltip.Root>
+        <Tooltip.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onRevertToOriginal}
+              aria-label={t.editor_revert_original}
+            >
+              <RotateCcw size={14} aria-hidden />
+            </Button>
+          }
+        />
+        <Tooltip.Panel>{t.editor_revert_original}</Tooltip.Panel>
+      </Tooltip.Root>
 
       {/* Export */}
       <Button

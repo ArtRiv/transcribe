@@ -78,3 +78,8 @@ build/
 **/AGENTS.md
 .claude/
 .cursor/
+
+# Personal feedback notes the user drops in the repo root while reviewing
+# the app. Never pushed to the portfolio repo.
+/Things to change*.txt
+/things to change*.txt

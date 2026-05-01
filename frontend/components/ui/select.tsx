@@ -4,13 +4,21 @@ import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Transcribe.html lines 281-291 (.select) — native select with chevron overlay
-function Select({
-  className,
-  children,
-  ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  /** When true, the wrapper expands to fill its parent flex/grid track and
+   *  the inner <select> is clamped with text-overflow: ellipsis so a long
+   *  selected option label cannot push past its container. */
+  fullWidth?: boolean;
+}
+
+function Select({ className, children, fullWidth, ...props }: SelectProps) {
   return (
-    <div className="relative inline-flex">
+    <div
+      className={cn(
+        "relative",
+        fullWidth ? "flex w-full min-w-0" : "inline-flex",
+      )}
+    >
       <select
         data-slot="select"
         className={cn(
@@ -19,6 +27,7 @@ function Select({
           "rounded-(--radius-md) outline-none transition-colors",
           "focus:border-(--color-accent-line)",
           "disabled:opacity-50",
+          fullWidth && "w-full min-w-0 truncate",
           className,
         )}
         {...props}

@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { User, Split, Merge, Trash2, Check, Plus } from "lucide-react";
+import { User, Split, Merge, Trash2, Check, Plus, Pencil } from "lucide-react";
 import * as Popover from "@/components/ui/popover";
 import * as Tooltip from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,9 @@ export function SegmentActions({
   const { t } = useI18n();
   const toast = useToast();
   const [bulk, setBulk] = React.useState(false);
+  // Tracks which speaker row in the popover is being renamed inline.
+  // null = not editing; otherwise the speaker.id whose row shows the input.
+  const [editingId, setEditingId] = React.useState<string | null>(null);
   const sourceSpeaker = speakers.find((sp) => sp.id === seg.speaker);
   // Snapshot the caret offset on mousedown of the Split button. Some browsers
   // (Safari) drop the active selection between mousedown and click; the ref
@@ -70,16 +73,15 @@ export function SegmentActions({
       toSpeakerId,
       bulk: useBulk,
     });
+    // Per-segment reassigns get no toast — the speaker chip swap on the row
+    // is enough feedback (item 7 of "things to change 2.txt"). Bulk merges
+    // delete a whole speaker from the rail, which is destructive enough to
+    // warrant the visible confirmation.
     if (useBulk && sourceSpeaker) {
       const dest = speakers.find((sp) => sp.id === toSpeakerId);
       toast.show(
-        // Bulk-merge toast keeps the dynamic speaker labels inline; we don't
-        // localize "Merged X into Y" because the labels themselves are
-        // user-supplied and untranslated.
         `Merged ${sourceSpeaker.label} into ${dest?.label ?? toSpeakerId}`,
       );
-    } else {
-      toast.show(t.editor_toast_segment_reassigned);
     }
   };
 
@@ -116,36 +118,113 @@ export function SegmentActions({
             </div>
             {speakers.map((sp, idx) => {
               const current = sp.id === seg.speaker;
-              return (
-                <button
-                  key={sp.id}
-                  role="option"
-                  aria-selected={current}
-                  type="button"
-                  onClick={() => onReassign(sp.id, bulk)}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-(--color-bg-3) text-left"
-                >
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: "50%",
-                      background: `var(--color-sp-${(idx % 5) + 1})`,
-                      flexShrink: 0,
+              const isEditing = editingId === sp.id;
+              if (isEditing) {
+                // Inline rename: a tiny form so the user can fix bad
+                // diarization labels without leaving the assign popover.
+                // Submitting commits + exits edit mode; Escape cancels.
+                return (
+                  <form
+                    key={sp.id}
+                    role="group"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const next = (
+                        e.currentTarget.elements.namedItem(
+                          "rename",
+                        ) as HTMLInputElement | null
+                      )?.value.trim();
+                      if (next && next !== sp.label) {
+                        dispatch({
+                          type: "rename_speaker",
+                          speakerId: sp.id,
+                          label: next,
+                        });
+                      }
+                      setEditingId(null);
                     }}
-                  />
-                  <span className="flex-1 text-(--color-fg-1) text-sm">
-                    {sp.label}
-                  </span>
-                  {current ? (
-                    <Check
-                      size={14}
-                      aria-hidden
-                      style={{ color: "var(--color-accent)" }}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded bg-(--color-bg-3)"
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: `var(--color-sp-${(idx % 5) + 1})`,
+                        flexShrink: 0,
+                      }}
                     />
-                  ) : null}
-                </button>
+                    <input
+                      autoFocus
+                      name="rename"
+                      defaultValue={sp.label}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditingId(null);
+                        }
+                      }}
+                      className="flex-1 bg-transparent text-(--color-fg-0) text-sm outline-none border-b border-(--color-accent-line) py-0.5"
+                      aria-label={t.editor_rename_speaker_aria}
+                    />
+                    <button
+                      type="submit"
+                      className="text-[11px] text-(--color-accent) hover:underline"
+                    >
+                      {t.editor_rename_save}
+                    </button>
+                  </form>
+                );
+              }
+              return (
+                <div
+                  key={sp.id}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-(--color-bg-3) group/sp"
+                >
+                  <button
+                    role="option"
+                    aria-selected={current}
+                    type="button"
+                    onClick={() => onReassign(sp.id, bulk)}
+                    className="flex items-center gap-2 flex-1 text-left bg-transparent"
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: `var(--color-sp-${(idx % 5) + 1})`,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span className="flex-1 text-(--color-fg-1) text-sm">
+                      {sp.label}
+                    </span>
+                    {current ? (
+                      <Check
+                        size={14}
+                        aria-hidden
+                        style={{ color: "var(--color-accent)" }}
+                      />
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(sp.id)}
+                    aria-label={format(t.editor_rename_speaker_label, {
+                      label: sp.label,
+                    })}
+                    className="opacity-0 group-hover/sp:opacity-100 focus:opacity-100 transition-opacity p-1 rounded hover:bg-(--color-bg-4)"
+                  >
+                    <Pencil
+                      size={12}
+                      aria-hidden
+                      style={{ color: "var(--color-fg-3)" }}
+                    />
+                  </button>
+                </div>
               );
             })}
             {/* Add-speaker affordance inside the reassign popover (item line 39
