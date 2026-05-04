@@ -1,5 +1,5 @@
 // Tests for frontend/lib/pairing/nonce-cache.ts
-// Verifies: issue/consume single-use semantics, TTL expiry.
+// Verifies: issue/consume single-use semantics, TTL expiry, markSeen replay protection.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 
@@ -58,6 +58,23 @@ describe("nonceCache", () => {
     expect(nonce.length).toBeLessThanOrEqual(44);
   });
 
+  it("hard cap: issuing 10,001 nonces via markSeen evicts the first one (memory-DoS guard)", () => {
+    // markSeen inserts into the same underlying cache and respects MAX_ENTRIES.
+    const firstBatch: string[] = [];
+    const MAX_ENTRIES = 10_000;
+    const now = Date.now();
+    for (let i = 0; i < MAX_ENTRIES + 1; i++) {
+      const nonce = `markseen-nonce-${i}-${Math.random()}`;
+      nonceCache.markSeen(nonce, now, now);
+      firstBatch.push(nonce);
+    }
+    // The very first nonce we markSeen'd should have been FIFO-evicted
+    const firstNonce = firstBatch[0];
+    // A second markSeen of the evicted nonce should succeed (treated as fresh)
+    const result = nonceCache.markSeen(firstNonce, now, now);
+    expect(result.ok).toBe(true);
+  });
+
   it("hard cap: issuing 10,001 nonces evicts the first one (memory-DoS guard)", () => {
     // Fill cache to 10,000 entries; issue one more — oldest must be evicted.
     // Cache is module-level so we fill from current size. This test is intentionally
@@ -73,5 +90,51 @@ describe("nonceCache", () => {
     const firstNonce = firstBatch[0];
     // consume() returns false for evicted entries (not in cache)
     expect(nonceCache.consume(firstNonce)).toBe(false);
+  });
+});
+
+describe("nonceCache.markSeen", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("returns ok:true for a fresh nonce with valid issued_at", () => {
+    const now = Date.now();
+    const nonce = `fresh-${Math.random()}`;
+    const result = nonceCache.markSeen(nonce, now, now);
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("returns ok:false reason:'replay' for a nonce already seen", () => {
+    const now = Date.now();
+    const nonce = `replay-${Math.random()}`;
+    nonceCache.markSeen(nonce, now, now); // first sighting — ok
+    const result = nonceCache.markSeen(nonce, now, now); // replay
+    expect(result).toEqual({ ok: false, reason: "replay" });
+  });
+
+  it("returns ok:false reason:'skewed' when issued_at is in the far future", () => {
+    const now = Date.now();
+    const farFuture = now + 6 * 60 * 1000; // 6 min ahead — outside ±5 min
+    const nonce = `future-${Math.random()}`;
+    const result = nonceCache.markSeen(nonce, farFuture, now);
+    expect(result).toEqual({ ok: false, reason: "skewed" });
+  });
+
+  it("returns ok:false reason:'skewed' when issued_at is in the far past", () => {
+    const now = Date.now();
+    const farPast = now - 6 * 60 * 1000; // 6 min ago — outside ±5 min
+    const nonce = `past-${Math.random()}`;
+    const result = nonceCache.markSeen(nonce, farPast, now);
+    expect(result).toEqual({ ok: false, reason: "skewed" });
+  });
+
+  it("accepts issued_at at the edge of the ±5-min window (boundary)", () => {
+    const now = Date.now();
+    const edgeMs = now - 5 * 60 * 1000; // exactly 5 min — equal, not over
+    const nonce = `edge-${Math.random()}`;
+    const result = nonceCache.markSeen(nonce, edgeMs, now);
+    expect(result.ok).toBe(true);
   });
 });

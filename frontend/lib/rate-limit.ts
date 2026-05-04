@@ -3,10 +3,11 @@
 //
 // Rate limits per RESEARCH.md §Open Questions #3 and §Don't Hand-Roll:
 //   pair-init:          5 req / 1 min / IP
-//   pair-confirm:       10 req / 1 min / pubkey
+//   pair-confirm:       10 req / 1 min / user_id  (D-21)
+//   unpair:             10 req / 1 min / user_id  (D-21; own budget, independent of pair-confirm)
 //   signal-token:       30 req / 1 min / pubkey
 //   signal-token-nonce: 60 req / 1 min / IP
-//   turn-credentials:   60 req / 1 min / user_id
+//   turn-credentials:   60 req / 1 min / user_id  (D-21)
 
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
@@ -25,6 +26,13 @@ export const pairConfirmLimiter = new Ratelimit({
   limiter: Ratelimit.slidingWindow(10, "1 m"),
   analytics: false,
   prefix: "rl:pair-confirm",
+});
+
+export const unpairLimiter = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(10, "1 m"),
+  analytics: false,
+  prefix: "rl:unpair",
 });
 
 export const signalTokenLimiter = new Ratelimit({

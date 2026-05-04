@@ -1,12 +1,16 @@
-// In-memory nonce cache for Ed25519 challenge-response (signal-token route).
-// Nonces are single-use, 32-byte random values, valid for 5 minutes.
+// In-memory nonce cache for Ed25519 challenge-response (signal-token route)
+// and pair-init replay protection.
 //
 // Backing store: in-memory Map per Vercel function instance.
 // Cross-instance miss is acceptable — engine retries on 401 nonce_expired/unknown.
 // RESEARCH.md §Pattern 4 explicitly endorses this for the 5-min skew window.
 
-const TTL_MS = 5 * 60 * 1000; // 5 minutes
+const TTL_MS = 5 * 60 * 1000; // 5 minutes — signal-token server-issued nonces
 const MAX_ENTRIES = 10_000;
+
+// pair-init client-generated nonce constants
+const NONCE_REPLAY_TTL_MS = 10 * 60 * 1000; // 10 min — wider than the JWT 5-min window to outlive any reasonable clock skew
+const ISSUED_AT_SKEW_MS = 5 * 60 * 1000; // ±5 min skew tolerance
 
 /** Stored value is the expiry timestamp in ms. */
 const cache = new Map<string, number>();
@@ -27,6 +31,10 @@ function maybeEvict(): void {
     cache.delete(oldest);
   }
 }
+
+export type MarkSeenResult =
+  | { ok: true }
+  | { ok: false; reason: "replay" | "expired" | "skewed" };
 
 export const nonceCache = {
   /**
@@ -54,5 +62,42 @@ export const nonceCache = {
     cache.delete(nonce); // always delete — expired or valid, we don't want it reused
     if (Date.now() > expiresAt) return false;
     return true;
+  },
+
+  /**
+   * Insert-if-absent for client-generated nonces (pair-init flow).
+   *
+   * Semantics: opposite of consume(). The nonce is engine-generated and the
+   * server has never seen it — so the FIRST sighting is valid and gets recorded.
+   * Any subsequent sighting with the same nonce is a replay.
+   *
+   * Returns ok:false if:
+   *   - 'skewed'  — issued_at is outside the ±5-min clock skew window
+   *   - 'replay'  — nonce was already recorded (even if not yet expired)
+   *   - 'expired' — existing entry has expired (stale entry replaced on next call)
+   *
+   * IMPORTANT: Call this AFTER signature verification so attackers with a bad
+   * signature cannot burn legitimate nonces. (WR-06 / CR-01 ordering fix.)
+   */
+  markSeen(
+    nonce: string,
+    issuedAtMs: number,
+    nowMs = Date.now(),
+  ): MarkSeenResult {
+    if (Math.abs(nowMs - issuedAtMs) > ISSUED_AT_SKEW_MS) {
+      return { ok: false, reason: "skewed" };
+    }
+    maybeEvict();
+    const existing = cache.get(nonce);
+    if (existing !== undefined) {
+      if (existing < nowMs) {
+        // Stale entry — replace it (idempotent for honest retries after function restart)
+        cache.set(nonce, nowMs + NONCE_REPLAY_TTL_MS);
+        return { ok: true };
+      }
+      return { ok: false, reason: "replay" };
+    }
+    cache.set(nonce, nowMs + NONCE_REPLAY_TTL_MS);
+    return { ok: true };
   },
 };
