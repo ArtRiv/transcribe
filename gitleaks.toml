@@ -66,8 +66,12 @@ regex = '''UPSTASH_REDIS_REST_TOKEN\s*=\s*["']?[A-Za-z0-9_\-]{32,}'''
 tags = ["upstash", "redis", "token"]
 
 [allowlist]
-description = "Allow placeholders in .env.example and the rules file itself"
+description = "Allow placeholders in .env.example, config file, and test fixtures"
 paths = [
   '''\.env\.example$''',
   '''gitleaks\.toml$''',
+  '''frontend/tests/.*\.test\.ts$''',
+  '''frontend/tests/.*\.test\.tsx$''',
+  '''frontend/tests/__fixtures__/.*$''',
+  '''frontend/tests/.*/_fixtures\.ts$''',
 ]
