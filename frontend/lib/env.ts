@@ -9,6 +9,9 @@
 // and any other backend secrets) MUST NOT be read here — they would leak into
 // the client bundle. Use a separate server-side module instead.
 
+// Server-only env vars (CLOUDFLARE_CALLS_TURN_*, SUPABASE_REALTIME_JWT_SECRET,
+// UPSTASH_REDIS_*) are read directly from process.env inside route handlers.
+
 /**
  * Public env vars exposed to the browser.
  * Each is set at Vercel build time; tunnel URL changes require a redeploy.
@@ -23,6 +26,14 @@ export const env = {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   /** "1" enables MSW + mock Realtime in development; any other value disables. */
   NEXT_PUBLIC_USE_MOCKS: process.env.NEXT_PUBLIC_USE_MOCKS ?? "0",
+  /**
+   * Minimum engine semver version the frontend will accept.
+   * Engines below this version receive an "Update available" prompt and cannot
+   * start new jobs (VERSION-02). Default "0.2.0" is the Phase 8 artifact tag.
+   * Override via Vercel env var when a breaking protocol change ships.
+   */
+  NEXT_PUBLIC_MIN_ENGINE_VERSION:
+    process.env.NEXT_PUBLIC_MIN_ENGINE_VERSION ?? "0.2.0",
 } as const;
 
 export type PublicEnv = typeof env;

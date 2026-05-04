@@ -37,6 +37,34 @@ description = "Supabase project URL (catches *.supabase.co references in committ
 regex = '''https?://[a-z0-9]{20}\.supabase\.co'''
 tags = ["supabase", "url"]
 
+# ── Phase 8: Pairing + WebRTC transport server-only env vars ──────────────────
+# These four vars hold long-lived secrets (API tokens, JWT signing secrets).
+# The patterns below catch accidental assignment of real values in committed files.
+
+[[rules]]
+id = "phase8-cloudflare-turn-token"
+description = "Cloudflare Calls TURN API token (Phase 8 — server-only)"
+regex = '''CLOUDFLARE_CALLS_TURN_API_TOKEN\s*=\s*["']?[A-Za-z0-9_\-]{20,}'''
+tags = ["cloudflare", "turn", "token"]
+
+[[rules]]
+id = "phase8-supabase-realtime-jwt-secret"
+description = "Supabase Realtime JWT signing secret (Phase 8 — server-only, ≥32 char base64)"
+regex = '''SUPABASE_REALTIME_JWT_SECRET\s*=\s*["']?[A-Za-z0-9+/=]{32,}'''
+tags = ["supabase", "jwt", "secret"]
+
+[[rules]]
+id = "phase8-upstash-redis-rest-url"
+description = "Upstash Redis REST URL (Phase 8 — server-only, https://*.upstash.io)"
+regex = '''UPSTASH_REDIS_REST_URL\s*=\s*["']?https://[A-Za-z0-9_.-]+\.upstash\.io'''
+tags = ["upstash", "redis", "url"]
+
+[[rules]]
+id = "phase8-upstash-redis-rest-token"
+description = "Upstash Redis REST token (Phase 8 — server-only, ≥32 char token)"
+regex = '''UPSTASH_REDIS_REST_TOKEN\s*=\s*["']?[A-Za-z0-9_\-]{32,}'''
+tags = ["upstash", "redis", "token"]
+
 [allowlist]
 description = "Allow placeholders in .env.example and the rules file itself"
 paths = [
