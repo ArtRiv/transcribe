@@ -12,49 +12,61 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
-const redis = Redis.fromEnv(); // reads UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN
+// In dev, UPSTASH_REDIS_REST_URL/TOKEN are commonly absent. Without them
+// Redis.fromEnv() throws, which crashes any route that calls .limit() and
+// surfaces as an opaque 500. Detect the missing-env case and substitute a
+// noop limiter so dev work isn't blocked. Production must keep enforcement,
+// so missing env there still throws as before.
+const hasUpstashEnv =
+  Boolean(process.env.UPSTASH_REDIS_REST_URL) &&
+  Boolean(process.env.UPSTASH_REDIS_REST_TOKEN);
 
-export const pairInitLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(5, "1 m"),
-  analytics: false,
-  prefix: "rl:pair-init",
-});
+if (!hasUpstashEnv && process.env.NODE_ENV === "production") {
+  throw new Error(
+    "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set in production",
+  );
+}
 
-export const pairConfirmLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(10, "1 m"),
-  analytics: false,
-  prefix: "rl:pair-confirm",
-});
+interface LimiterLike {
+  limit(key: string): Promise<{
+    success: boolean;
+    limit: number;
+    remaining: number;
+    reset: number;
+  }>;
+}
 
-export const unpairLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(10, "1 m"),
-  analytics: false,
-  prefix: "rl:unpair",
-});
+function buildLimiter(limit: number, prefix: string): LimiterLike {
+  if (!hasUpstashEnv) {
+    return {
+      limit: async () => ({
+        success: true,
+        limit,
+        remaining: limit,
+        reset: Date.now() + 60_000,
+      }),
+    };
+  }
+  return new Ratelimit({
+    redis: Redis.fromEnv(),
+    limiter: Ratelimit.slidingWindow(limit, "1 m"),
+    analytics: false,
+    prefix,
+  });
+}
 
-export const signalTokenLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(30, "1 m"),
-  analytics: false,
-  prefix: "rl:signal-token",
-});
+if (!hasUpstashEnv) {
+  console.warn(
+    "[rate-limit] UPSTASH_REDIS_REST_URL/TOKEN not set — using noop limiter (dev only).",
+  );
+}
 
-export const signalTokenNonceLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(60, "1 m"),
-  analytics: false,
-  prefix: "rl:signal-token-nonce",
-});
-
-export const turnCredentialsLimiter = new Ratelimit({
-  redis,
-  limiter: Ratelimit.slidingWindow(60, "1 m"),
-  analytics: false,
-  prefix: "rl:turn-creds",
-});
+export const pairInitLimiter = buildLimiter(5, "rl:pair-init");
+export const pairConfirmLimiter = buildLimiter(10, "rl:pair-confirm");
+export const unpairLimiter = buildLimiter(10, "rl:unpair");
+export const signalTokenLimiter = buildLimiter(30, "rl:signal-token");
+export const signalTokenNonceLimiter = buildLimiter(60, "rl:signal-token-nonce");
+export const turnCredentialsLimiter = buildLimiter(60, "rl:turn-creds");
 
 /**
  * Extract a client IP address from request headers for rate-limit keying.

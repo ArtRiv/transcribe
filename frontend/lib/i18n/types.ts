@@ -201,4 +201,51 @@ export interface Messages {
 
   // ── Language toggle ────────────────────────────────────────────────────
   language_toggle_aria: string;
+
+  // ── Phase 8: Pairing (/pair?code=…) ────────────────────────────────────
+  // Headings
+  pair_heading_default: string;     // "Engine running on your computer"
+  pair_heading_signed_out: string;  // same heading; sign-in panel below
+  pair_heading_success: string;     // "You're all set."
+  pair_heading_expired: string;     // "Pairing code expired."
+  pair_heading_network: string;     // "Can't reach the server."
+  pair_heading_offline: string;     // "Engine not detected."
+  pair_heading_generic: string;     // "Pairing failed."
+  pair_heading_conflict: string;    // "You already have an engine paired."
+
+  // Sub-copy
+  pair_body_default: string;
+  pair_body_signed_out: string;
+  pair_body_success: string;
+  pair_body_expired: string;
+  pair_body_network: string;
+  pair_body_offline: string;
+  pair_body_generic: string;
+  pair_body_conflict: string;
+  pair_body_not_your_engine: string;
+
+  // CTAs
+  pair_cta_pair: string;            // "Pair this engine"
+  pair_cta_pairing: string;         // "Pairing…"
+  pair_cta_replace: string;         // "Replace this engine"
+  pair_cta_cancel: string;          // "Cancel"
+  pair_cta_signin: string;          // "Sign in with email →"
+  pair_cta_try_again: string;       // "Try again"
+  pair_cta_go_to_transcribe: string;// "Go to transcribe →"
+  pair_cta_manage_devices: string;  // "Manage devices"
+
+  // ── Phase 8: Devices (/account/devices) ────────────────────────────────
+  devices_heading: string;           // "Devices"
+  devices_subheading: string;        // "Engines paired to your account."
+  devices_unpair: string;            // "Unpair"
+  devices_unpair_confirm: string;    // "Are you sure? Unpair"
+  devices_unpair_cancel: string;     // "Cancel"
+  devices_empty_heading: string;     // "No engine paired yet."
+  devices_empty_body: string;
+  devices_empty_cta: string;         // "Learn how to install →"
+
+  // ── Phase 8: Engine update prompt ──────────────────────────────────────
+  engine_update_heading: string;     // "Engine update available"
+  engine_update_body: string;        // "Your engine is at v{engineVersion}…"
+  engine_update_cta: string;         // "Download latest"
 }

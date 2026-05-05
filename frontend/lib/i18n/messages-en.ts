@@ -203,4 +203,58 @@ export const EN_MESSAGES: Messages = {
 
   // Language toggle
   language_toggle_aria: "Switch language / Trocar idioma",
+
+  // Phase 8: Pairing (/pair?code=…) — UI-SPEC §"Copywriting Contract"
+  // Headings (verbatim from 08-UI-SPEC.md §"Pair card headings")
+  pair_heading_default: "Engine running on your computer",
+  pair_heading_signed_out: "Engine running on your computer",
+  pair_heading_success: "You're all set.",
+  pair_heading_expired: "Pairing code expired.",
+  pair_heading_network: "Can't reach the server.",
+  pair_heading_offline: "Engine not detected.",
+  pair_heading_generic: "Pairing failed.",
+  pair_heading_conflict: "You already have an engine paired.",
+
+  // Sub-copy (verbatim from 08-UI-SPEC.md §"Sub-copy")
+  pair_body_default:
+    "Pair it to your account so this site can route jobs to it.",
+  pair_body_signed_out: "You'll be taken back to this page after signing in.",
+  pair_body_success:
+    "Your engine is paired. Drop a file on the transcribe page and it'll run on your machine.",
+  pair_body_expired:
+    "Restart the engine to get a new code, then come back to this page.",
+  pair_body_network: "Check your internet connection.",
+  pair_body_offline:
+    "We don't see your engine online. Make sure the tray icon is visible.",
+  pair_body_generic:
+    "Something went wrong. Copy the error code below and try again.",
+  pair_body_conflict: "Pairing this engine will replace the one below.",
+  pair_body_not_your_engine: "Not your engine?",
+
+  // CTAs (verbatim from 08-UI-SPEC.md §"Primary CTAs")
+  pair_cta_pair: "Pair this engine",
+  pair_cta_pairing: "Pairing…",
+  pair_cta_replace: "Replace this engine",
+  pair_cta_cancel: "Cancel",
+  pair_cta_signin: "Sign in with email →",
+  pair_cta_try_again: "Try again",
+  pair_cta_go_to_transcribe: "Go to transcribe →",
+  pair_cta_manage_devices: "Manage devices",
+
+  // Phase 8: Devices (/account/devices) — 08-UI-SPEC.md §"`/account/devices`"
+  devices_heading: "Devices",
+  devices_subheading: "Engines paired to your account.",
+  devices_unpair: "Unpair",
+  devices_unpair_confirm: "Are you sure? Unpair",
+  devices_unpair_cancel: "Cancel",
+  devices_empty_heading: "No engine paired yet.",
+  devices_empty_body:
+    "Install and run the engine, then visit the pair link it generates.",
+  devices_empty_cta: "Learn how to install →",
+
+  // Phase 8: Engine update prompt (VERSION-02/03)
+  engine_update_heading: "Engine update available",
+  engine_update_body:
+    "Your engine is at v{engineVersion}. The minimum supported version is v{minVersion}. Update to continue.",
+  engine_update_cta: "Download latest",
 };

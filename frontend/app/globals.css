@@ -60,6 +60,14 @@
   --sp-3: 12px;
   --sp-4: 16px;
   --sp-5: 24px;
+
+  /* Phase 8 spacing extensions (08-UI-SPEC §Token Extensions Required) */
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* Phase 8 radius extension — used by pair icon circle + success check circle */
+  --radius-full: 9999px;
 }
 
 /* Base reset — Transcribe.html lines 55-56 */

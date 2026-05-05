@@ -213,4 +213,59 @@ export const PT_BR_MESSAGES: Messages = {
 
   // Language toggle
   language_toggle_aria: "Switch language / Trocar idioma",
+
+  // Phase 8: Pairing (/pair?code=…)
+  // Headings
+  pair_heading_default: "Motor rodando no seu computador",
+  pair_heading_signed_out: "Motor rodando no seu computador",
+  pair_heading_success: "Tudo certo.",
+  pair_heading_expired: "Código de pareamento expirado.",
+  pair_heading_network: "Não foi possível contatar o servidor.",
+  pair_heading_offline: "Motor não detectado.",
+  pair_heading_generic: "Falha no pareamento.",
+  pair_heading_conflict: "Você já tem um motor pareado.",
+
+  // Sub-copy
+  pair_body_default:
+    "Pareie-o com sua conta para que o site possa enviar tarefas para ele.",
+  pair_body_signed_out:
+    "Você voltará para esta página depois de entrar.",
+  pair_body_success:
+    "Seu motor está pareado. Solte um arquivo na página de transcrição e ele vai rodar na sua máquina.",
+  pair_body_expired:
+    "Reinicie o motor para obter um novo código e volte a esta página.",
+  pair_body_network: "Verifique sua conexão com a internet.",
+  pair_body_offline:
+    "Não vemos seu motor online. Certifique-se de que o ícone da bandeja está visível.",
+  pair_body_generic:
+    "Algo deu errado. Copie o código de erro abaixo e tente novamente.",
+  pair_body_conflict: "Parear este motor substituirá o abaixo.",
+  pair_body_not_your_engine: "Não é o seu motor?",
+
+  // CTAs
+  pair_cta_pair: "Parear este motor",
+  pair_cta_pairing: "Pareando…",
+  pair_cta_replace: "Substituir este motor",
+  pair_cta_cancel: "Cancelar",
+  pair_cta_signin: "Entrar com e-mail →",
+  pair_cta_try_again: "Tentar novamente",
+  pair_cta_go_to_transcribe: "Ir para transcrição →",
+  pair_cta_manage_devices: "Gerenciar dispositivos",
+
+  // Phase 8: Devices (/account/devices)
+  devices_heading: "Dispositivos",
+  devices_subheading: "Motores pareados com sua conta.",
+  devices_unpair: "Desparer",
+  devices_unpair_confirm: "Tem certeza? Desparer",
+  devices_unpair_cancel: "Cancelar",
+  devices_empty_heading: "Nenhum motor pareado ainda.",
+  devices_empty_body:
+    "Instale e execute o motor, depois acesse o link de pareamento gerado por ele.",
+  devices_empty_cta: "Como instalar →",
+
+  // Phase 8: Engine update prompt (VERSION-02/03)
+  engine_update_heading: "Atualização do motor disponível",
+  engine_update_body:
+    "Seu motor está na v{engineVersion}. A versão mínima suportada é v{minVersion}. Atualize para continuar.",
+  engine_update_cta: "Baixar versão mais recente",
 };
