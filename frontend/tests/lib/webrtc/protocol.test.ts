@@ -28,8 +28,8 @@ describe("PROTOCOL_VERSION", () => {
 });
 
 describe("KNOWN_MESSAGE_TYPES", () => {
-  it("has exactly 13 entries (OfferMsg + AnswerMsg share 'description')", () => {
-    expect(KNOWN_MESSAGE_TYPES).toHaveLength(13);
+  it("has exactly 14 entries (CR-02 added job_init; OfferMsg + AnswerMsg share 'description')", () => {
+    expect(KNOWN_MESSAGE_TYPES).toHaveLength(14);
   });
 
   it("contains all expected type strings", () => {
@@ -38,6 +38,7 @@ describe("KNOWN_MESSAGE_TYPES", () => {
       "state",
       "description",
       "candidate",
+      "job_init",
       "audio_eof",
       "checkpoint",
       "progress",
@@ -95,7 +96,17 @@ const SYNTHETIC_PAYLOADS: Record<string, unknown>[] = [
       ],
     },
   },
-  { type: "resume_query", job_id: "job-abc-123" },
+  {
+    type: "job_init",
+    job_id: "user-abc123def456ab",
+    sha256_hex: "a".repeat(64),
+    total_bytes: 1048576,
+  },
+  {
+    type: "resume_query",
+    job_id: "user-abc123def456ab",
+    sha256_hex: "a".repeat(64),
+  },
   { type: "resume_state", byte_offset: 262144 },
   { type: "ping" },
   { type: "pong" },
@@ -169,6 +180,7 @@ describe("Cross-repo schema drift", () => {
       "state",
       "description",
       "candidate",
+      "job_init",
       "audio_eof",
       "checkpoint",
       "progress",

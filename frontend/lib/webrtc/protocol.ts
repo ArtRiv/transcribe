@@ -101,9 +101,23 @@ export interface ResultMsg {
   transcript: TranscriptPayload;
 }
 
+/**
+ * Sent by the frontend before binary chunks begin.
+ *
+ * CR-02: binds file identity (sha256_hex) to job_id so the engine can
+ * detect cross-file splicing on resume.
+ */
+export interface JobInitMsg {
+  type: "job_init";
+  job_id: string;
+  sha256_hex: string; // lowercase hex SHA-256 of the full source file
+  total_bytes: number; // expected file size in bytes (informational)
+}
+
 export interface ResumeQueryMsg {
   type: "resume_query";
   job_id: string;
+  sha256_hex: string; // CR-02: must match the sidecar on the engine side
 }
 
 export interface ResumeStateMsg {
@@ -135,6 +149,7 @@ export type WireMessage =
   | OfferMsg // AnswerMsg is structurally a union member too; TS uses sdp.type to narrow
   | AnswerMsg
   | CandidateMsg
+  | JobInitMsg
   | AudioEofMsg
   | CheckpointMsg
   | ProgressMsg
@@ -145,14 +160,16 @@ export type WireMessage =
   | PongMsg
   | ErrorMsg;
 
-// 13 distinct `type` discriminator strings; OfferMsg and AnswerMsg share `type: 'description'`
-// and are disambiguated by `sdp.type` ('offer' vs 'answer'). The 14 message interfaces
-// collapse to 13 wire-format type strings — the cross-repo set-equality test pins this.
+// 14 distinct `type` discriminator strings (was 13 before CR-02 added job_init).
+// OfferMsg and AnswerMsg share `type: 'description'` and are disambiguated by
+// sdp.type ('offer' vs 'answer').  The 15 message interfaces collapse to 14
+// wire-format type strings — the cross-repo set-equality test pins this.
 export const KNOWN_MESSAGE_TYPES = [
   "hello",
   "state",
   "description",
   "candidate",
+  "job_init",
   "audio_eof",
   "checkpoint",
   "progress",
