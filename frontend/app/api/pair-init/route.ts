@@ -85,11 +85,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "invalid_nonce" }, { status: 401 });
     }
 
-    // 6. INSERT into pending_pairings (B-02: includes gpu + engine_version)
+    // 6. INSERT into pending_pairings (B-02: includes gpu + engine_version).
+    //    pubkey column is BYTEA; Postgrest expects Postgres hex format ("\xAABB..."),
+    //    so prefix the engine-supplied hex string with "\x" on the way in.
     const admin = getSupabaseAdminClient();
     const { error: insertError } = await admin
       .from("pending_pairings")
-      .insert({ code, pubkey, gpu, engine_version })
+      .insert({ code, pubkey: `\\x${pubkey}`, gpu, engine_version })
       .select()
       .single();
 
