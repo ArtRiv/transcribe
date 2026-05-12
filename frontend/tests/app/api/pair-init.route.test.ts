@@ -6,10 +6,10 @@ import { TEST_PUBKEY_HEX, signMessage } from "./_fixtures";
 
 // ── Module mocks ────────────────────────────────────────────────────────────
 
-const mockMarkSeen = vi.fn(() => ({ ok: true }) as const);
+const mockConsume = vi.fn(() => true);
 vi.mock("@/lib/pairing/nonce-cache", () => ({
   nonceCache: {
-    markSeen: mockMarkSeen,
+    consume: mockConsume,
   },
 }));
 
@@ -48,8 +48,8 @@ beforeEach(() => {
   process.env.UPSTASH_REDIS_REST_URL = "https://fake.upstash.io";
   process.env.UPSTASH_REDIS_REST_TOKEN = "fake-token";
   vi.resetModules();
-  mockMarkSeen.mockClear();
-  mockMarkSeen.mockReturnValue({ ok: true } as const);
+  mockConsume.mockClear();
+  mockConsume.mockReturnValue(true);
   mockPairInitLimit.mockResolvedValue({ success: true });
   mockInsertSingle.mockResolvedValue({ data: null, error: null });
   mockInsert.mockReturnValue({
@@ -173,8 +173,8 @@ describe("POST /api/pair-init", () => {
     expect(body).toHaveProperty("error", "bad_request");
   });
 
-  it("returns 401 when nonce replay detected (markSeen reason=replay)", async () => {
-    mockMarkSeen.mockReturnValueOnce({ ok: false, reason: "replay" } as const);
+  it("returns 401 when nonce is unknown/expired/already-consumed", async () => {
+    mockConsume.mockReturnValueOnce(false);
     const { POST } = await import("@/app/api/pair-init/route");
     const req = await makeValidRequest();
     const res = await POST(req);
@@ -183,23 +183,12 @@ describe("POST /api/pair-init", () => {
     expect(body).toHaveProperty("error", "invalid_nonce");
   });
 
-  it("returns 401 when issued_at is skewed (markSeen reason=skewed)", async () => {
-    mockMarkSeen.mockReturnValueOnce({ ok: false, reason: "skewed" } as const);
-    const { POST } = await import("@/app/api/pair-init/route");
-    const req = await makeValidRequest();
-    const res = await POST(req);
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body).toHaveProperty("error", "invalid_nonce");
-  });
-
-  it("invalid sig does NOT advance nonce into markSeen — markSeen not called on bad sig (WR-06)", async () => {
+  it("invalid sig does NOT consume the nonce — consume not called on bad sig (WR-06)", async () => {
     const { POST } = await import("@/app/api/pair-init/route");
     const req = await makeValidRequest({ signature: "0".repeat(128) });
     const res = await POST(req);
     expect(res.status).toBe(401);
-    // Signature failed before markSeen — nonce must NOT have been recorded
-    expect(mockMarkSeen).not.toHaveBeenCalled();
+    expect(mockConsume).not.toHaveBeenCalled();
     const body = await res.json();
     expect(body).toHaveProperty("error", "invalid_nonce");
   });

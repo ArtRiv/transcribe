@@ -8,7 +8,7 @@
 //   3. Validate pairing code format
 //   4. Verify Ed25519 signature over "pair-init:{code}:{nonce}:{issued_at}:{gpu}:{engine_version}"
 //      (sig BEFORE nonce — prevents attacker burning honest engine nonce with bad sig; WR-06)
-//   5. markSeen(nonce, issued_at) — insert-if-absent replay protection (CR-01 / WR-06)
+//   5. consume(nonce) — single-use server-issued nonce (engine fetches from /api/signal-token/nonce)
 //   6. INSERT into pending_pairings (code, pubkey, gpu, engine_version) via admin client
 //   7. Return 200 on success
 //
@@ -79,10 +79,9 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "invalid_nonce" }, { status: 401 });
     }
 
-    // 5. Insert-if-absent replay protection (CR-01: engine generates nonce client-side,
-    //    so consume() would always 401. markSeen() records first sighting, rejects replays.)
-    const seenResult = nonceCache.markSeen(nonce, issued_at);
-    if (!seenResult.ok) {
+    // 5. Consume server-issued nonce (single-use; engine fetched it from /api/signal-token/nonce).
+    //    Returns false on unknown / expired / already-consumed — engine retries on 401.
+    if (!nonceCache.consume(nonce)) {
       return NextResponse.json({ error: "invalid_nonce" }, { status: 401 });
     }
 
