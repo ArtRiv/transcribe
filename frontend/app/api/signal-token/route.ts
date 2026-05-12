@@ -105,11 +105,20 @@ export async function POST(request: Request): Promise<NextResponse> {
     const exp = Math.floor(Date.now() / 1000) + 300; // 5 minutes
     const token = await signRealtimeJwt({ user_id, channel, exp });
 
-    // 8. Return token + channel + supabase_url
+    // 8. Return token + channel + supabase_url.
+    //    realtime-py 2.x appends "/websocket" to whatever URL we hand it, so we
+    //    need to include "/realtime/v1" here. Full final URL becomes
+    //    wss://<project>.supabase.co/realtime/v1/websocket. Omitting the suffix
+    //    routes the engine WebSocket to /websocket and Supabase 404s.
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) {
+      console.error("[signal-token] NEXT_PUBLIC_SUPABASE_URL missing");
+      return NextResponse.json({ error: "internal" }, { status: 500 });
+    }
     return NextResponse.json({
       token,
       channel,
-      supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      supabase_url: `${supabaseUrl.replace(/\/$/, "")}/realtime/v1`,
     });
   } catch (err) {
     console.error("[signal-token] handler error:", err);
