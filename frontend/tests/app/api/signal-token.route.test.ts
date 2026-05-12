@@ -19,19 +19,10 @@ vi.mock("@/lib/pairing/nonce-cache", () => ({
   },
 }));
 
-// Mock admin client — device found by default
-const mockDeviceRow = {
-  user_id: "550e8400-e29b-41d4-a716-446655440000",
-  pubkey: TEST_PUBKEY_HEX,
-};
-const mockSingle = vi.fn().mockResolvedValue({
-  data: mockDeviceRow,
-  error: null,
-});
-const mockEq = vi.fn().mockReturnValue({ single: mockSingle });
-const mockSelect = vi.fn().mockReturnValue({ eq: mockEq });
-const mockFrom = vi.fn().mockReturnValue({ select: mockSelect });
-const mockAdminClientInstance = { from: mockFrom };
+// Mock admin client — RPC find_device_user_by_pubkey_hex returns user_id by default
+const MOCK_USER_ID = "550e8400-e29b-41d4-a716-446655440000";
+const mockRpc = vi.fn().mockResolvedValue({ data: MOCK_USER_ID, error: null });
+const mockAdminClientInstance = { rpc: mockRpc };
 vi.mock("@/lib/pairing/server", () => ({
   getSupabaseAdminClient: vi.fn(() => mockAdminClientInstance),
 }));
@@ -60,7 +51,7 @@ beforeEach(() => {
   vi.resetModules();
   mockNonceConsume.mockReturnValue(true);
   mockLimit.mockResolvedValue({ success: true });
-  mockSingle.mockResolvedValue({ data: mockDeviceRow, error: null });
+  mockRpc.mockResolvedValue({ data: MOCK_USER_ID, error: null });
 });
 
 afterEach(() => {
@@ -105,7 +96,7 @@ describe("POST /api/signal-token", () => {
     expect(body).toHaveProperty("token");
     expect(body).toHaveProperty("channel");
     expect(body).toHaveProperty("supabase_url");
-    expect(body.channel).toBe(`pair:${mockDeviceRow.user_id}`);
+    expect(body.channel).toBe(`pair:${MOCK_USER_ID}`);
     expect(typeof body.token).toBe("string");
     // JWT has 3 parts
     expect(body.token.split(".").length).toBe(3);
@@ -166,11 +157,8 @@ describe("POST /api/signal-token", () => {
     expect(body).toHaveProperty("error", "invalid_nonce");
   });
 
-  it("returns 404 device_not_found when device row missing (engine unpair signal — PAIR-06)", async () => {
-    mockSingle.mockResolvedValue({
-      data: null,
-      error: { message: "not found", code: "PGRST116" },
-    });
+  it("returns 404 device_not_found when RPC returns null (engine unpair signal — PAIR-06)", async () => {
+    mockRpc.mockResolvedValue({ data: null, error: null });
     const { POST } = await import("@/app/api/signal-token/route");
     const req = await makeValidRequest();
     const res = await POST(req);
@@ -203,9 +191,7 @@ describe("POST /api/signal-token", () => {
 
   it("returns generic error copy — no stack traces in error responses", async () => {
     // Even for server errors, body should only have { error: string }
-    mockSingle.mockRejectedValue(
-      new Error("internal DB error with secret data"),
-    );
+    mockRpc.mockRejectedValue(new Error("internal DB error with secret data"));
     const { POST } = await import("@/app/api/signal-token/route");
     const req = await makeValidRequest();
     const res = await POST(req);
