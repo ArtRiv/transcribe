@@ -166,7 +166,7 @@ describe("POST /api/signal-token", () => {
     expect(body).toHaveProperty("error", "invalid_nonce");
   });
 
-  it("returns 401 when device is not found (no pubkey enumeration)", async () => {
+  it("returns 404 device_not_found when device row missing (engine unpair signal — PAIR-06)", async () => {
     mockSingle.mockResolvedValue({
       data: null,
       error: { message: "not found", code: "PGRST116" },
@@ -174,9 +174,9 @@ describe("POST /api/signal-token", () => {
     const { POST } = await import("@/app/api/signal-token/route");
     const req = await makeValidRequest();
     const res = await POST(req);
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body).toHaveProperty("error", "unauthorized");
+    expect(body).toHaveProperty("error", "device_not_found");
   });
 
   it("returns 401 when signature is invalid", async () => {

@@ -68,16 +68,28 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "invalid_nonce" }, { status: 401 });
     }
 
-    // 5. Look up device by pubkey
+    // 5. Look up device by pubkey.
+    //    pubkey column is BYTEA; Postgrest needs Postgres hex format ("\xAABB...")
+    //    on the filter value or the .eq comparison silently misses every row.
     const admin = getSupabaseAdminClient();
     const { data: device, error: dbError } = await admin
       .from("devices")
       .select("user_id, pubkey")
-      .eq("pubkey", pubkey)
+      .eq("pubkey", `\\x${pubkey}`)
       .single();
 
-    if (dbError || !device) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // PostgREST returns PGRST116 ("no rows returned") on .single() with no match.
+    // That's "device_not_found" — the engine treats HTTP 404 as the unpaired signal
+    // (PAIR-06 / UAT-F). Any other DB error is a real internal failure.
+    if (!device) {
+      if (!dbError || dbError.code === "PGRST116") {
+        return NextResponse.json(
+          { error: "device_not_found" },
+          { status: 404 },
+        );
+      }
+      console.error("[signal-token] DB lookup error:", dbError.code);
+      return NextResponse.json({ error: "internal" }, { status: 500 });
     }
 
     // 6. Verify Ed25519 signature over "signal-token:<nonce>:<issued_at>"
