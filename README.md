@@ -2,7 +2,10 @@
 
 A free, self-hostable web app that turns long audio/video into editable, speaker-labeled transcripts using OpenAI's Whisper running locally on the developer's own GPU. Zero ongoing cost.
 
-> **Status:** Phase 1 (Foundation) — scaffolding only; transcription pipeline arrives in Phase 2. See [`.planning/ROADMAP.md`](.planning/ROADMAP.md).
+> **Status:** working end to end — resumable chunked upload, GPU transcription, speaker
+> diarization, in-browser editing, and export. The webapp is deployed at
+> <https://transcribe-ruby.vercel.app>; transcription runs only while a GPU host is awake
+> and reachable, which is a property of the design rather than an outage.
 
 ## What it is
 
@@ -16,7 +19,7 @@ Drop in a long audio or video file (meeting recording, interview, podcast). The 
 - **Data plane:** Supabase (Postgres + Auth + Realtime + Storage for transcript JSON only — never source media).
 - **Public exposure:** Cloudflare **named tunnel** on a custom domain (stable URL, set Vercel env once). Quick Tunnel (`*.trycloudflare.com`) remains as a fallback for hosts without a Cloudflare-managed domain. See "Public exposure (Cloudflare Tunnel)" below.
 
-See [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) for the pinned dep matrix and [`CLAUDE.md`](CLAUDE.md) for architectural decisions.
+See [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) for the pinned dep matrix.
 
 ## Repo layout
 
@@ -26,23 +29,24 @@ transcribe/
   backend/        # FastAPI + whisper.cpp + pyannote — runs on the dev's GPU
   supabase/       # Migrations + RLS-from-day-one
   docs/           # DEPENDENCIES.md (pinned dep matrix)
-  .planning/      # GSD planning artifacts
+  scripts/        # host setup helpers
+  tools/          # TUS interop test page
   LICENSE         # MIT
   README.md       # this file
 ```
 
 No `pnpm` workspace, no `turbo.json`, no root `package.json` — the two apps live in different ecosystems and share no runtime code; Vercel's "Root Directory = `frontend`" feature handles the layout cleanly.
 
-## Self-hosting (high level — Phase 6 will expand)
+## Self-hosting (high level)
 
-Phase 1 only stands up the empty scaffolding. The full self-host walkthrough lives in Phase 6. For now:
+The short version. Per-component detail is in the sections below.
 
 1. Clone the repo.
 2. Install host tooling: `pnpm` (via corepack), `uv` (via astral.sh installer), `cloudflared` (Cloudflare apt repo), `supabase` CLI, `gitleaks`, `pre-commit`. See [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md).
 3. Copy `.env.example` to `.env`, populate with your Supabase + HF credentials, then `ln -sf $(pwd)/.env frontend/.env.local && ln -sf $(pwd)/.env backend/.env` (or maintain per-app env files separately).
 4. **CRITICAL:** Run `pre-commit install` after cloning so the gitleaks hook actually runs (`.pre-commit-config.yaml` alone does nothing without `install`).
 5. Apply Supabase migrations: `supabase db push --db-url "$SUPABASE_DB_URL"`.
-6. Phase 2 will bring up `backend/` and the whisper.cpp build; Phase 3 will run `frontend/`.
+6. Bring up `backend/` and build whisper.cpp — see "Backend: run + verify" below — then run `frontend/`.
 
 ## Public exposure (Cloudflare Tunnel)
 
@@ -106,15 +110,15 @@ Pre-flight will refuse Quick Tunnel mode while a named-tunnel `~/.cloudflared/co
 mv ~/.cloudflared/config.yml ~/.cloudflared/config.yml.bak
 ```
 
-See [`.planning/research/SUMMARY.md`](.planning/research/SUMMARY.md) "Amendment 2026-04-27" for the original decision rationale (Quick Tunnel was the v1 default until a domain was available).
+Quick Tunnel was the default until a Cloudflare-managed domain was available.
 
 ## License
 
 [MIT](LICENSE) — chosen for compatibility with all upstream deps (Whisper, whisper.cpp, pyannote, Next.js, FastAPI all MIT/permissive).
 
-## Backend (Phase 2): Run + verify
+## Backend: run + verify
 
-The FastAPI backend runs locally on the developer's GPU host. Phase 2 ships the full transcription pipeline (whisper.cpp + Vulkan ASR, pyannote-CPU diarization, single-job queue, TUS chunked upload, Supabase Realtime progress).
+The FastAPI backend runs locally on the developer's GPU host. It carries the full transcription pipeline: whisper.cpp + Vulkan ASR, pyannote-CPU diarization, a single-job queue, TUS chunked upload, and Supabase Realtime progress.
 
 **Single-command start (OPS-02):**
 
@@ -176,7 +180,14 @@ cd backend && uv sync                            # Python deps (pyannote, torch 
 
 See [`docs/DEPENDENCIES.md`](docs/DEPENDENCIES.md) for pinned versions + commit SHAs.
 
-## Status & Roadmap
+## Status
 
-See [`.planning/ROADMAP.md`](.planning/ROADMAP.md) — six-phase plan. Phase 1 (Foundation) is in progress; transcription pipeline (Phase 2) and frontend skeleton (Phase 3) are parallel lanes once Phase 1 closes.
+Working end to end: resumable chunked upload, transcription on the GPU host, speaker
+diarization, in-browser editing, and export to `.txt`, `.srt`, `.vtt`, `.md` and `.json`.
+The webapp is deployed on Vercel; the work happens on a machine you own, so the hosted
+UI transcribes only while a host is awake and reachable.
+
+The packaged, no-Python way to run that host is
+[`transcribe-engine`](https://github.com/artriv/transcribe-engine) — the same whisper.cpp
+and pyannote stack as `backend/`, bundled into one tray-icon binary per OS.
 
