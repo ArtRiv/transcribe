@@ -16,16 +16,10 @@ import { Redis } from "@upstash/redis";
 // Redis.fromEnv() throws, which crashes any route that calls .limit() and
 // surfaces as an opaque 500. Detect the missing-env case and substitute a
 // noop limiter so dev work isn't blocked. Production must keep enforcement,
-// so missing env there still throws as before.
+// so a limited route still refuses to serve without them - see buildLimiter.
 const hasUpstashEnv =
   Boolean(process.env.UPSTASH_REDIS_REST_URL) &&
   Boolean(process.env.UPSTASH_REDIS_REST_TOKEN);
-
-if (!hasUpstashEnv && process.env.NODE_ENV === "production") {
-  throw new Error(
-    "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set in production",
-  );
-}
 
 interface LimiterLike {
   limit(key: string): Promise<{
@@ -39,12 +33,25 @@ interface LimiterLike {
 function buildLimiter(limit: number, prefix: string): LimiterLike {
   if (!hasUpstashEnv) {
     return {
-      limit: async () => ({
-        success: true,
-        limit,
-        remaining: limit,
-        reset: Date.now() + 60_000,
-      }),
+      limit: async () => {
+        // Enforcement is not optional in production - but the check belongs
+        // here, at request time, not at module scope. At module scope it also
+        // ran during `next build`, which evaluates route modules with
+        // NODE_ENV=production and no secrets: every build without Upstash
+        // credentials failed, self-hosting included, which is this project's
+        // whole premise.
+        if (process.env.NODE_ENV === "production") {
+          throw new Error(
+            "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set in production",
+          );
+        }
+        return {
+          success: true,
+          limit,
+          remaining: limit,
+          reset: Date.now() + 60_000,
+        };
+      },
     };
   }
   return new Ratelimit({
